@@ -31,6 +31,7 @@ import org.gradle.jvm.JvmBinarySpec;
 import org.gradle.jvm.internal.DefaultJavaPlatformVariantAxisCompatibility;
 import org.gradle.jvm.internal.JarBinaryRenderer;
 import org.gradle.jvm.platform.JavaPlatform;
+import org.gradle.internal.jvm.JavaInstallationsDirLocator;
 import org.gradle.jvm.toolchain.internal.JavaInstallationProbe;
 import org.gradle.language.base.internal.model.DefaultVariantAxisCompatibilityFactory;
 import org.gradle.language.base.internal.model.VariantAxisCompatibilityFactory;
@@ -66,6 +67,10 @@ public class PlatformJvmServices implements PluginServiceRegistry {
     private class BuildScopeServices {
         LocalLibraryDependencyResolverFactory createResolverProviderFactory(ProjectModelResolver projectModelResolver, ServiceRegistry registry) {
             return new LocalLibraryDependencyResolverFactory(projectModelResolver, registry);
+        }
+
+        JavaInstallationsDirLocator createJavaInstallationLocator(ExecActionFactory execFactory) {
+            return JavaInstallationsDirLocator.withDefaultStrategies(execFactory);
         }
 
         JavaInstallationProbe createJavaInstallationProbe(ExecActionFactory factory) {
