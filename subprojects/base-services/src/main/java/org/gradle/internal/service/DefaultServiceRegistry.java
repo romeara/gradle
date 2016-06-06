@@ -414,6 +414,14 @@ public class DefaultServiceRegistry implements ServiceRegistry, Closeable {
         return doGet(serviceType);
     }
 
+    @Override
+    public <T> T find(Class<T> serviceType) throws ServiceLookupException {
+        List<T> all = getAll(serviceType);
+        if (all.size() > 1) {
+            throw new ServiceLookupException("Multiple services found of type " + format(serviceType));
+        }
+        return all.isEmpty() ? null : all.get(0);
+    }
 
     private Object doGet(Type serviceType) throws IllegalArgumentException {
         synchronized (lock) {

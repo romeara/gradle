@@ -36,6 +36,16 @@ public interface ServiceRegistry {
     <T> T get(Class<T> serviceType) throws UnknownServiceException, ServiceLookupException;
 
     /**
+     * Locates a service of the given type, returning null if none exists.
+     *
+     * @param serviceType The service type.
+     * @param <T>         The service type.
+     * @return The service instance, or null if none registered.
+     * @throws ServiceLookupException On failure to lookup the specified service.
+     */
+    <T> T find(Class<T> serviceType) throws ServiceLookupException;
+
+    /**
      * Locates all services of the given type.
      *
      * @param serviceType The service type.

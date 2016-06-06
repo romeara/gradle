@@ -43,15 +43,17 @@ public class DefaultTaskContainerFactory implements Factory<TaskContainerInterna
     private final ModelRegistry modelRegistry;
     private final Instantiator instantiator;
     private final ITaskFactory taskFactory;
+    private final ConstructingTaskResolver parentResolver;
     private Project project;
     public ProjectAccessListener projectAccessListener;
 
-    public DefaultTaskContainerFactory(ModelRegistry modelRegistry, Instantiator instantiator, ITaskFactory taskFactory, Project project, ProjectAccessListener projectAccessListener) {
+    public DefaultTaskContainerFactory(ModelRegistry modelRegistry, Instantiator instantiator, ITaskFactory taskFactory, Project project, ProjectAccessListener projectAccessListener, ConstructingTaskResolver parentResolver) {
         this.modelRegistry = modelRegistry;
         this.instantiator = instantiator;
         this.taskFactory = taskFactory;
         this.project = project;
         this.projectAccessListener = projectAccessListener;
+        this.parentResolver = parentResolver;
     }
 
     public TaskContainerInternal create() {
@@ -62,7 +64,7 @@ public class DefaultTaskContainerFactory implements Factory<TaskContainerInterna
             new Transformer<DefaultTaskContainer, MutableModelNode>() {
                 @Override
                 public DefaultTaskContainer transform(MutableModelNode mutableModelNode) {
-                    return instantiator.newInstance(DefaultTaskContainer.class, mutableModelNode, project, instantiator, taskFactory, projectAccessListener);
+                    return instantiator.newInstance(DefaultTaskContainer.class, mutableModelNode, project, instantiator, taskFactory, projectAccessListener, parentResolver);
                 }
             },
             new Task.Namer(),

@@ -44,13 +44,15 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
     private final ProjectAccessListener projectAccessListener;
     private final Set<String> placeholders = Sets.newHashSet();
     private final NamedEntityInstantiator<Task> instantiator;
+    private final ConstructingTaskResolver parentResolver;
 
-    public DefaultTaskContainer(MutableModelNode modelNode, ProjectInternal project, Instantiator instantiator, ITaskFactory taskFactory, ProjectAccessListener projectAccessListener) {
+    public DefaultTaskContainer(MutableModelNode modelNode, ProjectInternal project, Instantiator instantiator, ITaskFactory taskFactory, ProjectAccessListener projectAccessListener, ConstructingTaskResolver parentResolver) {
         super(Task.class, instantiator, project);
         this.modelNode = modelNode;
         this.taskFactory = taskFactory;
         this.projectAccessListener = projectAccessListener;
         this.instantiator = new TaskInstantiator(taskFactory);
+        this.parentResolver = parentResolver;
     }
 
     public Task create(Map<String, ?> options) {
@@ -155,6 +157,12 @@ public class DefaultTaskContainer extends DefaultTaskCollection<Task> implements
         if (!GUtil.isTrue(path)) {
             throw new InvalidUserDataException("A path must be specified!");
         }
+
+        // TODO:DAZ Hack for composite build
+        if (path.contains("::") && parentResolver != null) {
+            return parentResolver.resolveTask(path, this);
+        }
+
         return getByPath(path);
     }
 

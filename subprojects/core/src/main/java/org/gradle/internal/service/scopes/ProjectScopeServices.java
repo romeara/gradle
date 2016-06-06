@@ -52,6 +52,7 @@ import org.gradle.api.internal.project.DeferredProjectConfiguration;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.project.ant.DefaultAntLoggingAdapterFactory;
 import org.gradle.api.internal.project.taskfactory.ITaskFactory;
+import org.gradle.api.internal.tasks.ConstructingTaskResolver;
 import org.gradle.api.internal.tasks.DefaultTaskContainerFactory;
 import org.gradle.api.internal.tasks.TaskContainerInternal;
 import org.gradle.api.tasks.util.PatternSet;
@@ -164,7 +165,8 @@ public class ProjectScopeServices extends DefaultServiceRegistry {
     }
 
     protected Factory<TaskContainerInternal> createTaskContainerInternal() {
-        return new DefaultTaskContainerFactory(get(ModelRegistry.class), get(Instantiator.class), get(ITaskFactory.class), project, get(ProjectAccessListener.class));
+        ConstructingTaskResolver parentResolver = find(ConstructingTaskResolver.class);
+        return new DefaultTaskContainerFactory(get(ModelRegistry.class), get(Instantiator.class), get(ITaskFactory.class), project, get(ProjectAccessListener.class), parentResolver);
     }
 
     protected SoftwareComponentContainer createSoftwareComponentContainer() {

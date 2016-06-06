@@ -18,6 +18,7 @@ package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 
 import org.gradle.StartParameter;
 import org.gradle.api.internal.artifacts.ivyservice.dependencysubstitution.DependencySubstitutionRuleProvider;
+import org.gradle.api.internal.tasks.ConstructingTaskResolver;
 import org.gradle.initialization.GradleLauncherFactory;
 import org.gradle.internal.service.ServiceRegistry;
 
@@ -38,4 +39,7 @@ public class CompositeScopeServices {
         return new CompositeBuildDependencySubstitutions(compositeBuildContext);
     }
 
+    ConstructingTaskResolver createResolver() {
+        return new CompositeTaskResolver();
+    }
 }
