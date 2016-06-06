@@ -44,6 +44,7 @@ import java.util.SortedSet;
 public class DefaultBuildableCompositeBuildContext implements CompositeBuildContext {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultBuildableCompositeBuildContext.class);
 
+    // TODO:DAZ This doesn't need to be a multimap how it's currently used
     private final Multimap<ModuleIdentifier, ProjectComponentIdentifier> replacementProjects = ArrayListMultimap.create();
     private final Map<ProjectComponentIdentifier, RegisteredProject> projectMetadata = Maps.newHashMap();
 
