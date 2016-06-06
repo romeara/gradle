@@ -72,7 +72,8 @@ public class CompositeProjectArtifactBuilder implements ProjectArtifactBuilder {
         }
     }
 
-    private void build(ProjectComponentIdentifier project, Iterable<String> taskNames) {
+    @Override
+    public void build(ProjectComponentIdentifier project, Iterable<String> taskNames) {
         buildStarted(project);
         try {
             doBuild(project, taskNames);

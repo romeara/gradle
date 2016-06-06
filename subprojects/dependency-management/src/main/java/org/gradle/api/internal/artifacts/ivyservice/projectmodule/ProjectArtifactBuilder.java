@@ -16,8 +16,14 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
 
 public interface ProjectArtifactBuilder {
     void build(ComponentArtifactMetadata artifact);
+
+    // TODO:DAZ The buildDirectory should not need to be provided here
+    // TODO:DAZ Should be a build identifier, not a project identifier
+    // TODO:DAZ This is not the right place for this method
+    void build(ProjectComponentIdentifier project, Iterable<String> taskNames);
 }
