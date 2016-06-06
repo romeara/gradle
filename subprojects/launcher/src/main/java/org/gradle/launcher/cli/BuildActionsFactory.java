@@ -16,6 +16,7 @@
 
 package org.gradle.launcher.cli;
 
+import com.google.common.collect.Lists;
 import org.gradle.StartParameter;
 import org.gradle.api.Transformer;
 import org.gradle.cli.CommandLineConverter;
@@ -53,6 +54,7 @@ import org.gradle.util.GFileUtils;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -168,7 +170,9 @@ class BuildActionsFactory implements CommandLineAction {
                     daemonParameters.isEnabled(), startParameter.isContinuous(), daemonParameters.isInteractive(), ClassPath.EMPTY);
         }
 
-        String[] participantPaths = GFileUtils.readFile(compositeDefinition).split("\n");
+        List<String> participantPaths = Lists.newArrayList();
+        participantPaths.add(".");
+        CollectionUtils.addAll(participantPaths, GFileUtils.readFile(compositeDefinition).split("\n"));
         List<GradleParticipantBuild> participants = CollectionUtils.collect(participantPaths, new Transformer<GradleParticipantBuild, String>() {
             @Override
             public GradleParticipantBuild transform(String participantPath) {
