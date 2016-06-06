@@ -25,6 +25,7 @@ import org.gradle.execution.taskpath.ResolvedTaskPath;
 import org.gradle.execution.taskpath.TaskPathResolver;
 import org.gradle.util.NameMatcher;
 
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -75,8 +76,18 @@ public class TaskSelector {
         return getSelection(path, project);
     }
 
-    private TaskSelection getSelection(String path, ProjectInternal project) {
-        ResolvedTaskPath taskPath = taskPathResolver.resolvePath(path, project);
+    private TaskSelection getSelection(final String path, final ProjectInternal project) {
+        if (path.contains("::")) {
+            String taskName = path.replace(':', '_');
+            return new TaskSelection(":", taskName, new TaskSelectionResult() {
+                @Override
+                public void collectTasks(Collection<? super Task> tasks) {
+                    tasks.add(project.getTasks().resolveTask(path));
+                }
+            });
+        }
+
+        final ResolvedTaskPath taskPath = taskPathResolver.resolvePath(path, project);
         ProjectInternal targetProject = taskPath.getProject();
         if (taskPath.isQualified()) {
             configurer.configure(targetProject);
