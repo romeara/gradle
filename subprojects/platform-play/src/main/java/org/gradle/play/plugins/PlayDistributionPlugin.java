@@ -334,6 +334,12 @@ public class PlayDistributionPlugin extends RuleSource {
         }
 
         private static String projectPathToSafeFileName(String projectPath) {
+            // Don't rename composite paths for now
+            // TODO:DAZ This isn't right
+            if (projectPath.contains("::")) {
+                return null;
+            }
+
             if (projectPath.equals(":")) {
                 return null;
             }
