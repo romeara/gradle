@@ -25,6 +25,7 @@ import org.gradle.api.artifacts.component.ProjectComponentSelector;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.internal.tasks.DefaultTaskDependency;
+import org.gradle.execution.ProjectConfigurer;
 import org.gradle.initialization.ReportedException;
 import org.gradle.internal.component.local.model.DefaultLocalComponentMetadata;
 import org.gradle.internal.component.local.model.DefaultProjectComponentIdentifier;
@@ -53,7 +54,7 @@ public class CompositeContextBuilder implements BuildActionRunner {
     @Override
     public void run(BuildAction action, BuildController buildController) {
         try {
-            GradleInternal gradle = buildController.configure();
+            GradleInternal gradle = getConfiguredGradle(buildController);
             ProjectInternal rootProject = gradle.getRootProject();
 
             String participantName = rootProject.getName();
@@ -67,6 +68,17 @@ public class CompositeContextBuilder implements BuildActionRunner {
                 throw e;
             }
         }
+    }
+
+    private GradleInternal getConfiguredGradle(BuildController buildController) {
+        GradleInternal gradle = buildController.configure();
+        gradle.getServices().get(ProjectConfigurer.class).configureHierarchy(gradle.getRootProject());
+        for (Project project : gradle.getRootProject().getAllprojects()) {
+            ProjectInternal projectInternal = (ProjectInternal) project;
+            projectInternal.getTasks().discoverTasks();
+            projectInternal.bindAllModelRules();
+        }
+        return gradle;
     }
 
     private void registerProject(String buildName, ProjectInternal project) {
