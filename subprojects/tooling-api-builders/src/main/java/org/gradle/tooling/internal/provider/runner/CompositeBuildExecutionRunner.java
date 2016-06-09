@@ -18,9 +18,8 @@ package org.gradle.tooling.internal.provider.runner;
 
 import org.gradle.StartParameter;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeBuildContext;
-import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeContextBuilder;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeScopeServices;
-import org.gradle.api.logging.LogLevel;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.DefaultBuildableCompositeBuildContext;
 import org.gradle.api.logging.Logging;
 import org.gradle.initialization.BuildRequestContext;
 import org.gradle.initialization.GradleLauncherFactory;
@@ -34,7 +33,6 @@ import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.invocation.BuildActionRunner;
 import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
-import org.gradle.internal.service.ServiceRegistryBuilder;
 import org.gradle.internal.service.scopes.BuildSessionScopeServices;
 import org.gradle.launcher.cli.ExecuteBuildAction;
 import org.gradle.launcher.exec.BuildActionExecuter;
@@ -79,35 +77,14 @@ public class CompositeBuildExecutionRunner implements CompositeBuildActionRunner
 
     private DefaultServiceRegistry createCompositeAwareServices(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
                                                                 CompositeParameters compositeParameters, ServiceRegistry sharedServices) {
-        boolean propagateFailures = true;
-        CompositeBuildContext context = constructCompositeContext(actionStartParameter, buildRequestContext, compositeParameters, sharedServices, propagateFailures);
-
-        DefaultServiceRegistry compositeServices = (DefaultServiceRegistry) ServiceRegistryBuilder.builder()
-            .displayName("Composite services")
-            .parent(sharedServices)
-            .build();
-        compositeServices.add(CompositeBuildContext.class, context);
+        DefaultServiceRegistry compositeServices = new BuildSessionScopeServices(sharedServices, actionStartParameter, ClassPath.EMPTY);
+        compositeServices.add(CompositeBuildContext.class, new DefaultBuildableCompositeBuildContext());
         compositeServices.addProvider(new CompositeScopeServices(actionStartParameter, compositeServices));
+
+        GradleLauncherFactory gradleLauncherFactory = compositeServices.get(GradleLauncherFactory.class);
+        new CompositeContextBuilder(gradleLauncherFactory).buildCompositeContext(actionStartParameter, buildRequestContext, compositeParameters.getBuilds(), compositeServices);
+
         return compositeServices;
     }
 
-    private CompositeBuildContext constructCompositeContext(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
-                                                                     CompositeParameters compositeParameters, ServiceRegistry sharedServices, boolean propagateFailures) {
-        GradleLauncherFactory gradleLauncherFactory = sharedServices.get(GradleLauncherFactory.class);
-        CompositeContextBuilder builder = new CompositeContextBuilder(propagateFailures);
-        BuildActionExecuter<BuildActionParameters> buildActionExecuter = new InProcessBuildActionExecuter(gradleLauncherFactory, builder);
-
-        for (GradleParticipantBuild participant : compositeParameters.getBuilds()) {
-            StartParameter startParameter = actionStartParameter.newInstance();
-            startParameter.setProjectDir(participant.getProjectDir());
-            startParameter.setConfigureOnDemand(false);
-            if (startParameter.getLogLevel() == LogLevel.LIFECYCLE) {
-                startParameter.setLogLevel(LogLevel.QUIET);
-                LOGGER.lifecycle("[composite-build] Configuring participant: " + participant.getProjectDir());
-            }
-
-            buildActionExecuter.execute(new ExecuteBuildAction(startParameter), buildRequestContext, null, sharedServices);
-        }
-        return builder.build();
-    }
 }

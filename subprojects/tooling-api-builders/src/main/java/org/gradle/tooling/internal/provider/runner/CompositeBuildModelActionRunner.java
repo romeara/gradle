@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import org.gradle.StartParameter;
 import org.gradle.api.BuildCancelledException;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeBuildContext;
-import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeContextBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeContextBuildActionRunner;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeScopeServices;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.Logging;
@@ -175,7 +175,7 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
     private CompositeBuildContext constructCompositeContext(BuildModelAction modelAction, BuildRequestContext buildRequestContext,
                                                                      CompositeParameters compositeParameters, ServiceRegistry sharedServices, boolean propagateFailures) {
         GradleLauncherFactory gradleLauncherFactory = sharedServices.get(GradleLauncherFactory.class);
-        CompositeContextBuilder builder = new CompositeContextBuilder(propagateFailures);
+        CompositeContextBuildActionRunner builder = new CompositeContextBuildActionRunner(propagateFailures);
         BuildActionExecuter<BuildActionParameters> buildActionExecuter = new InProcessBuildActionExecuter(gradleLauncherFactory, builder);
 
         for (GradleParticipantBuild participant : compositeParameters.getBuilds()) {

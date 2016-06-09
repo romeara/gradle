@@ -93,6 +93,7 @@ public class DefaultBuildableCompositeBuildContext implements CompositeBuildCont
         return registeredProject == null ? null : registeredProject.artifacts;
      }
 
+    @Override
     public void register(ModuleIdentifier moduleId, ProjectComponentIdentifier project, LocalComponentMetadata localComponentMetadata, File projectDirectory) {
         LOGGER.info("Registering project '" + project + "' in composite build. Will substitute for module '" + moduleId + "'.");
         replacementProjects.put(moduleId, project);

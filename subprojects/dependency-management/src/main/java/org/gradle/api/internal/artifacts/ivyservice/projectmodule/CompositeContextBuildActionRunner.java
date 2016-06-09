@@ -43,18 +43,28 @@ import org.gradle.internal.invocation.BuildController;
 import java.io.File;
 import java.util.Set;
 
-public class CompositeContextBuilder implements BuildActionRunner {
-    private final DefaultBuildableCompositeBuildContext context = new DefaultBuildableCompositeBuildContext();
+public class CompositeContextBuildActionRunner implements BuildActionRunner {
+    private final CompositeBuildContext context;
     private final boolean propagateFailures;
 
-    public CompositeContextBuilder(boolean propagateFailures) {
+    public CompositeContextBuildActionRunner(boolean propagateFailures) {
+        this(new DefaultBuildableCompositeBuildContext(), propagateFailures);
+    }
+
+    public CompositeContextBuildActionRunner(CompositeBuildContext context, boolean propagateFailures) {
+        this.context = context;
         this.propagateFailures = propagateFailures;
     }
 
     @Override
     public void run(BuildAction action, BuildController buildController) {
+        GradleInternal gradle = buildController.configure();
+        run(gradle);
+    }
+
+    public void run(GradleInternal gradle) {
         try {
-            GradleInternal gradle = getConfiguredGradle(buildController);
+            fullyConfigure(gradle);
             ProjectInternal rootProject = gradle.getRootProject();
 
             String participantName = rootProject.getName();
@@ -70,15 +80,13 @@ public class CompositeContextBuilder implements BuildActionRunner {
         }
     }
 
-    private GradleInternal getConfiguredGradle(BuildController buildController) {
-        GradleInternal gradle = buildController.configure();
+    private void fullyConfigure(GradleInternal gradle) {
         gradle.getServices().get(ProjectConfigurer.class).configureHierarchy(gradle.getRootProject());
         for (Project project : gradle.getRootProject().getAllprojects()) {
             ProjectInternal projectInternal = (ProjectInternal) project;
             projectInternal.getTasks().discoverTasks();
             projectInternal.bindAllModelRules();
         }
-        return gradle;
     }
 
     private void registerProject(String buildName, ProjectInternal project) {
