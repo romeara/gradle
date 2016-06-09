@@ -53,17 +53,17 @@ public class DefaultCompositeContextBuilder implements CompositeContextBuilder {
 
     @Override
     public void buildCompositeContext(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
-                                      ServiceRegistry sharedServices, File compositeDefinitionFile) {
+                                      ServiceRegistry sharedServices, List<File> buildDirs) {
         CompositeBuildContext context = sharedServices.get(CompositeBuildContext.class);
         CompositeContextBuildActionRunner builder = new CompositeContextBuildActionRunner(context, true);
 
-        for (GradleParticipantBuild participant : determineCompositeParticipants(compositeDefinitionFile)) {
+        for (File participant : buildDirs) {
             StartParameter startParameter = actionStartParameter.newInstance();
-            startParameter.setProjectDir(participant.getProjectDir());
+            startParameter.setProjectDir(participant);
             startParameter.setConfigureOnDemand(false);
             if (startParameter.getLogLevel() == LogLevel.LIFECYCLE) {
                 startParameter.setLogLevel(LogLevel.QUIET);
-                LOGGER.lifecycle("[composite-build] Configuring participant: " + participant.getProjectDir());
+                LOGGER.lifecycle("[composite-build] Configuring participant: " + participant);
             }
 
             execute(builder, buildRequestContext, sharedServices, startParameter);
