@@ -20,9 +20,11 @@ import org.gradle.StartParameter;
 import org.gradle.initialization.BuildRequestContext;
 import org.gradle.internal.service.ServiceRegistry;
 
+import java.io.File;
+
 public interface CompositeContextBuilder {
     void buildCompositeContext(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
-                               ServiceRegistry sharedServices);
+                               ServiceRegistry sharedServices, File compositeBuildDefinition);
 
     void printContext(ServiceRegistry sharedServices);
 }

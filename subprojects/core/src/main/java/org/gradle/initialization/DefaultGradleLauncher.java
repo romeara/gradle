@@ -26,9 +26,11 @@ import org.gradle.execution.BuildExecuter;
 import org.gradle.internal.Factory;
 import org.gradle.internal.composite.CompositeContextBuilder;
 import org.gradle.internal.concurrent.CompositeStoppable;
+import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.progress.BuildOperationExecutor;
 import org.gradle.internal.service.scopes.BuildScopeServices;
-import org.gradle.internal.logging.LoggingManagerInternal;
+
+import java.io.File;
 
 public class DefaultGradleLauncher extends GradleLauncher {
 
@@ -124,7 +126,7 @@ public class DefaultGradleLauncher extends GradleLauncher {
         if (buildComposite) {
             compositeContextBuilder.printContext(gradle.getServices());
             BuildRequestContext buildRequestContext = new DefaultBuildRequestContext(buildServices.get(BuildRequestMetaData.class), buildServices.get(BuildCancellationToken.class), buildServices.get(BuildEventConsumer.class));
-            compositeContextBuilder.buildCompositeContext(gradle.getStartParameter(), buildRequestContext, buildServices);
+            compositeContextBuilder.buildCompositeContext(gradle.getStartParameter(), buildRequestContext, buildServices, new File(gradle.getRootProject().getProjectDir(), "composite.gradle"));
         }
 
         // Configure build

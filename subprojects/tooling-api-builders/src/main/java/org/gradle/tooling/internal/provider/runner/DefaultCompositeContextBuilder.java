@@ -16,7 +16,10 @@
 
 package org.gradle.tooling.internal.provider.runner;
 
+import com.google.common.collect.Lists;
+import org.apache.commons.io.FileUtils;
 import org.gradle.StartParameter;
+import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeBuildContext;
@@ -26,32 +29,35 @@ import org.gradle.api.logging.Logging;
 import org.gradle.initialization.BuildRequestContext;
 import org.gradle.initialization.DefaultGradleLauncher;
 import org.gradle.initialization.GradleLauncherFactory;
+import org.gradle.internal.UncheckedException;
 import org.gradle.internal.composite.CompositeContextBuilder;
+import org.gradle.internal.composite.DefaultGradleParticipantBuild;
 import org.gradle.internal.composite.GradleParticipantBuild;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.scopes.BuildScopeServices;
 import org.gradle.internal.service.scopes.BuildSessionScopeServices;
+import org.gradle.util.CollectionUtils;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 public class DefaultCompositeContextBuilder implements CompositeContextBuilder {
     private static final org.gradle.api.logging.Logger LOGGER = Logging.getLogger(DefaultCompositeContextBuilder.class);
 
     private final GradleLauncherFactory gradleLauncherFactory;
-    private final List<GradleParticipantBuild> builds;
 
-    public DefaultCompositeContextBuilder(GradleLauncherFactory gradleLauncherFactory, List<GradleParticipantBuild> builds) {
+    public DefaultCompositeContextBuilder(GradleLauncherFactory gradleLauncherFactory) {
         this.gradleLauncherFactory = gradleLauncherFactory;
-        this.builds = builds;
     }
 
     @Override
     public void buildCompositeContext(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
-                                      ServiceRegistry sharedServices) {
+                                      ServiceRegistry sharedServices, File compositeDefinitionFile) {
         CompositeBuildContext context = sharedServices.get(CompositeBuildContext.class);
         CompositeContextBuildActionRunner builder = new CompositeContextBuildActionRunner(context, true);
 
-        for (GradleParticipantBuild participant : builds) {
+        for (GradleParticipantBuild participant : determineCompositeParticipants(compositeDefinitionFile)) {
             StartParameter startParameter = actionStartParameter.newInstance();
             startParameter.setProjectDir(participant.getProjectDir());
             startParameter.setConfigureOnDemand(false);
@@ -87,5 +93,29 @@ public class DefaultCompositeContextBuilder implements CompositeContextBuilder {
     public GradleInternal configure(DefaultGradleLauncher launcher) {
         return (GradleInternal) launcher.getBuildAnalysis().getGradle();
     }
+
+    private List<GradleParticipantBuild> determineCompositeParticipants(final File compositeDefinition) {
+        List<File> participantPaths = Lists.newArrayList();
+        try {
+            participantPaths.add(new File(compositeDefinition.getParent(), ".").getCanonicalFile());
+            for (String path : FileUtils.readLines(compositeDefinition)) {
+                path = path.trim();
+                if (path.isEmpty() || path.startsWith("#")) {
+                    continue;
+                }
+                participantPaths.add(new File(compositeDefinition.getParent(), path).getCanonicalFile());
+            }
+        } catch (IOException e) {
+            throw UncheckedException.throwAsUncheckedException(e);
+        }
+
+        return CollectionUtils.collect(participantPaths, new Transformer<GradleParticipantBuild, File>() {
+            @Override
+            public GradleParticipantBuild transform(File participantPath) {
+                return new DefaultGradleParticipantBuild(participantPath, null, null, null);
+            }
+        });
+    }
+
 
 }

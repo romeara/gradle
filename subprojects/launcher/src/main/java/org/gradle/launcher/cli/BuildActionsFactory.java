@@ -16,19 +16,14 @@
 
 package org.gradle.launcher.cli;
 
-import com.google.common.collect.Lists;
-import org.apache.commons.io.FileUtils;
 import org.gradle.StartParameter;
-import org.gradle.api.Transformer;
 import org.gradle.cli.CommandLineConverter;
 import org.gradle.cli.CommandLineParser;
 import org.gradle.cli.ParsedCommandLine;
 import org.gradle.configuration.GradleLauncherMetaData;
 import org.gradle.internal.SystemProperties;
-import org.gradle.internal.UncheckedException;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.composite.CompositeParameters;
-import org.gradle.internal.composite.DefaultGradleParticipantBuild;
 import org.gradle.internal.composite.GradleParticipantBuild;
 import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.logging.events.OutputEventListener;
@@ -49,11 +44,10 @@ import org.gradle.launcher.exec.BuildActionParameters;
 import org.gradle.launcher.exec.BuildExecuter;
 import org.gradle.launcher.exec.DefaultBuildActionParameters;
 import org.gradle.launcher.exec.DefaultCompositeBuildActionParameters;
-import org.gradle.util.CollectionUtils;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -159,17 +153,11 @@ class BuildActionsFactory implements CommandLineAction {
 
     private BuildActionParameters createBuildActionParameters(StartParameter startParameter, DaemonParameters daemonParameters) {
         final File buildDir = startParameter.getCurrentDir();
-        File compositeDefinition = new File(buildDir, "composite.gradle");
-        if (!compositeDefinition.isFile()) {
-            return defaultBuildActionParameters(startParameter, daemonParameters);
-        }
-
-        List<GradleParticipantBuild> participants = determineCompositeParticipants(compositeDefinition);
-        if (participants.size() == 1) {
-            return defaultBuildActionParameters(startParameter, daemonParameters);
-        }
-
-        return compositeBuildActionParameters(startParameter, daemonParameters, participants);
+//        File compositeDefinition = new File(buildDir, "composite.gradle");
+//        if (!compositeDefinition.isFile()) {
+//            return defaultBuildActionParameters(startParameter, daemonParameters);
+//        }
+        return compositeBuildActionParameters(startParameter, daemonParameters, Collections.<GradleParticipantBuild>emptyList());
     }
 
     private BuildActionParameters defaultBuildActionParameters(StartParameter startParameter, DaemonParameters daemonParameters) {
@@ -190,29 +178,6 @@ class BuildActionsFactory implements CommandLineAction {
             startParameter.getLogLevel(),
             daemonParameters.isEnabled(), startParameter.isContinuous(),
             daemonParameters.isInteractive(), ClassPath.EMPTY, compositeParameters);
-    }
-
-    private List<GradleParticipantBuild> determineCompositeParticipants(final File compositeDefinition) {
-        List<File> participantPaths = Lists.newArrayList();
-        try {
-            participantPaths.add(new File(compositeDefinition.getParent(), ".").getCanonicalFile());
-            for (String path : FileUtils.readLines(compositeDefinition)) {
-                path = path.trim();
-                if (path.isEmpty() || path.startsWith("#")) {
-                    continue;
-                }
-                participantPaths.add(new File(compositeDefinition.getParent(), path).getCanonicalFile());
-            }
-        } catch (IOException e) {
-            throw UncheckedException.throwAsUncheckedException(e);
-        }
-
-        return CollectionUtils.collect(participantPaths, new Transformer<GradleParticipantBuild, File>() {
-            @Override
-            public GradleParticipantBuild transform(File participantPath) {
-                return new DefaultGradleParticipantBuild(participantPath, null, null, null);
-            }
-        });
     }
 
     private long getBuildStartTime() {
