@@ -168,6 +168,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         this(new BuildSessionScopeServices(parent, startParameter, ClassPath.EMPTY), true);
     }
 
+    public BuildSessionScopeServices getSessionServices() {
+        return sessionServices;
+    }
+
     @VisibleForTesting
     BuildScopeServices(final BuildSessionScopeServices sessionServices, boolean singleUseSession) {
         super(sessionServices);

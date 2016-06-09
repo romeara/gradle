@@ -22,11 +22,14 @@ import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeScope
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.DefaultBuildableCompositeBuildContext;
 import org.gradle.api.logging.Logging;
 import org.gradle.initialization.BuildRequestContext;
+import org.gradle.initialization.DefaultGradleLauncher;
+import org.gradle.initialization.GradleLauncher;
 import org.gradle.initialization.GradleLauncherFactory;
 import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.composite.CompositeBuildActionParameters;
 import org.gradle.internal.composite.CompositeBuildActionRunner;
 import org.gradle.internal.composite.CompositeBuildController;
+import org.gradle.internal.composite.CompositeContextBuilder;
 import org.gradle.internal.composite.CompositeParameters;
 import org.gradle.internal.composite.GradleParticipantBuild;
 import org.gradle.internal.invocation.BuildAction;
@@ -69,7 +72,7 @@ public class CompositeBuildExecutionRunner implements CompositeBuildActionRunner
 
         // Use a ModelActionRunner to ensure that model events are emitted
         BuildActionRunner runner = new ExecuteBuildActionRunner();
-        BuildActionExecuter<BuildActionParameters> buildActionExecuter = new InProcessBuildActionExecuter(gradleLauncherFactory, runner);
+        BuildActionExecuter<BuildActionParameters> buildActionExecuter = new InProcessBuildActionExecuter(new ComposingGradleLauncherFactory(gradleLauncherFactory), runner);
         ServiceRegistry buildScopedServices = new BuildSessionScopeServices(compositeServices, startParameter, ClassPath.EMPTY);
 
         buildActionExecuter.execute(new ExecuteBuildAction(startParameter), buildRequestContext, null, buildScopedServices);
@@ -77,14 +80,43 @@ public class CompositeBuildExecutionRunner implements CompositeBuildActionRunner
 
     private DefaultServiceRegistry createCompositeAwareServices(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
                                                                 CompositeParameters compositeParameters, ServiceRegistry sharedServices) {
+        GradleLauncherFactory gradleLauncherFactory = sharedServices.get(GradleLauncherFactory.class);
         DefaultServiceRegistry compositeServices = new BuildSessionScopeServices(sharedServices, actionStartParameter, ClassPath.EMPTY);
         compositeServices.add(CompositeBuildContext.class, new DefaultBuildableCompositeBuildContext());
+        compositeServices.add(CompositeContextBuilder.class, new DefaultCompositeContextBuilder(gradleLauncherFactory, compositeParameters.getBuilds()));
         compositeServices.addProvider(new CompositeScopeServices(actionStartParameter, compositeServices));
 
-        GradleLauncherFactory gradleLauncherFactory = compositeServices.get(GradleLauncherFactory.class);
-        new CompositeContextBuilder(gradleLauncherFactory).buildCompositeContext(actionStartParameter, buildRequestContext, compositeParameters.getBuilds(), compositeServices);
+//        new DefaultCompositeContextBuilder(gradleLauncherFactory, compositeParameters.getBuilds()).buildCompositeContext(actionStartParameter, buildRequestContext, compositeServices);
 
         return compositeServices;
+    }
+
+    private static class ComposingGradleLauncherFactory implements GradleLauncherFactory {
+        private final GradleLauncherFactory delegate;
+
+        private ComposingGradleLauncherFactory(GradleLauncherFactory delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public GradleLauncher newInstance(StartParameter startParameter) {
+            return enable(delegate.newInstance(startParameter));
+        }
+
+        @Override
+        public GradleLauncher newInstance(StartParameter startParameter, ServiceRegistry parent) {
+            return enable(delegate.newInstance(startParameter, parent));
+        }
+
+        @Override
+        public GradleLauncher newInstance(StartParameter startParameter, BuildRequestContext requestContext, ServiceRegistry parent) {
+            return enable(delegate.newInstance(startParameter, requestContext, parent));
+        }
+
+        private GradleLauncher enable(GradleLauncher gradleLauncher) {
+            ((DefaultGradleLauncher) gradleLauncher).buildComposite = true;
+            return gradleLauncher;
+        }
     }
 
 }

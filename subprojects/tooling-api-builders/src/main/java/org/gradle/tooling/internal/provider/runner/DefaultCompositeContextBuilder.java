@@ -17,6 +17,7 @@
 package org.gradle.tooling.internal.provider.runner;
 
 import org.gradle.StartParameter;
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeBuildContext;
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeContextBuildActionRunner;
@@ -25,26 +26,32 @@ import org.gradle.api.logging.Logging;
 import org.gradle.initialization.BuildRequestContext;
 import org.gradle.initialization.DefaultGradleLauncher;
 import org.gradle.initialization.GradleLauncherFactory;
+import org.gradle.internal.composite.CompositeContextBuilder;
 import org.gradle.internal.composite.GradleParticipantBuild;
 import org.gradle.internal.service.ServiceRegistry;
+import org.gradle.internal.service.scopes.BuildScopeServices;
+import org.gradle.internal.service.scopes.BuildSessionScopeServices;
 
 import java.util.List;
 
-public class CompositeContextBuilder {
-    private static final org.gradle.api.logging.Logger LOGGER = Logging.getLogger(CompositeContextBuilder.class);
+public class DefaultCompositeContextBuilder implements CompositeContextBuilder {
+    private static final org.gradle.api.logging.Logger LOGGER = Logging.getLogger(DefaultCompositeContextBuilder.class);
 
     private final GradleLauncherFactory gradleLauncherFactory;
+    private final List<GradleParticipantBuild> builds;
 
-    public CompositeContextBuilder(GradleLauncherFactory gradleLauncherFactory) {
+    public DefaultCompositeContextBuilder(GradleLauncherFactory gradleLauncherFactory, List<GradleParticipantBuild> builds) {
         this.gradleLauncherFactory = gradleLauncherFactory;
+        this.builds = builds;
     }
 
+    @Override
     public void buildCompositeContext(StartParameter actionStartParameter, BuildRequestContext buildRequestContext,
-                                      List<GradleParticipantBuild> participants, ServiceRegistry sharedServices) {
+                                      ServiceRegistry sharedServices) {
         CompositeBuildContext context = sharedServices.get(CompositeBuildContext.class);
         CompositeContextBuildActionRunner builder = new CompositeContextBuildActionRunner(context, true);
 
-        for (GradleParticipantBuild participant : participants) {
+        for (GradleParticipantBuild participant : builds) {
             StartParameter startParameter = actionStartParameter.newInstance();
             startParameter.setProjectDir(participant.getProjectDir());
             startParameter.setConfigureOnDemand(false);
@@ -57,8 +64,17 @@ public class CompositeContextBuilder {
         }
     }
 
+    @Override
+    public void printContext(ServiceRegistry sharedServices) {
+        CompositeBuildContext context = sharedServices.get(CompositeBuildContext.class);
+        for (ProjectComponentIdentifier projectComponentIdentifier : context.getAllProjects()) {
+            System.out.println("Found participant: " + projectComponentIdentifier);
+        }
+    }
+
     private void execute(CompositeContextBuildActionRunner buildActionRunner, BuildRequestContext buildRequestContext, ServiceRegistry contextServices, StartParameter startParameter) {
-        DefaultGradleLauncher gradleLauncher = (DefaultGradleLauncher) gradleLauncherFactory.newInstance(startParameter, buildRequestContext, contextServices);
+        BuildSessionScopeServices sessionScopeServices = ((BuildScopeServices) contextServices).getSessionServices();
+        DefaultGradleLauncher gradleLauncher = (DefaultGradleLauncher) gradleLauncherFactory.newInstance(startParameter, buildRequestContext, sessionScopeServices);
         try {
             gradleLauncher.addStandardOutputListener(buildRequestContext.getOutputListener());
             gradleLauncher.addStandardErrorListener(buildRequestContext.getErrorListener());
