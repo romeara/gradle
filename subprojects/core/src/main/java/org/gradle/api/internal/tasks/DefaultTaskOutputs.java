@@ -297,10 +297,8 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
                     FileUtils.forceMkdir(resolved);
                     File file = new File(resolved, path);
 
-                    boolean created = file.createNewFile();
-                    if (!created) {
-                        throw new IOException(String.format("Could not create file '%s'", file));
-                    }
+                    //noinspection ResultOfMethodCallIgnored
+                    file.createNewFile();
                     Files.asByteSink(file).writeFrom(data);
                 }
             };
