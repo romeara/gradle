@@ -77,21 +77,21 @@ class CachedTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
 
     def "tasks get cached when source code changes back to previous state"() {
         expect:
-        succeedsWithCache "compileJava" assertTaskNotSkipped ":compileJava"
+        succeedsWithCache "jar" assertTaskNotSkipped ":compileJava" assertTaskNotSkipped ":jar"
 
         println "\n\n\n-----------------------------------------\n\n\n"
 
         when:
         file("src/main/java/Hello.java").text = CHANGED_HELLO_WORLD
         then:
-        succeedsWithCache "compileJava" assertTaskNotSkipped ":compileJava"
+        succeedsWithCache "jar" assertTaskNotSkipped ":compileJava" assertTaskNotSkipped ":jar"
 
         println "\n\n\n-----------------------------------------\n\n\n"
 
         when:
         file("src/main/java/Hello.java").text = ORIGINAL_HELLO_WORLD
         then:
-        succeedsWithCache "compileJava" assertTaskSkipped ":compileJava"
+        succeedsWithCache "jar" assertTaskSkipped ":compileJava" assertTaskSkipped ":jar"
     }
 
     def "jar tasks get cached even when output file is changed"() {
