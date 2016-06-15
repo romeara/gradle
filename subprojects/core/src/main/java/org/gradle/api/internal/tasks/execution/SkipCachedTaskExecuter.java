@@ -31,6 +31,7 @@ import org.gradle.api.internal.tasks.TaskStateInternal;
 import org.gradle.api.internal.tasks.cache.FileBasedTaskState;
 import org.gradle.api.internal.tasks.cache.TaskStateProvider;
 import org.gradle.util.Clock;
+import org.gradle.util.SingleMessageLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +50,7 @@ public class SkipCachedTaskExecuter implements TaskExecuter {
         this.taskOutputPacker = taskOutputPacker;
         this.taskStateProvider = taskStateProvider;
         this.delegate = delegate;
+        SingleMessageLogger.incubatingFeatureUsed("Task output caching");
         LOGGER.info("Using {}", taskResultCache.getDescription());
     }
 
