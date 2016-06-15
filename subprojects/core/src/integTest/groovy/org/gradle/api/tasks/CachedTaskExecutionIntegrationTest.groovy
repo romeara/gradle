@@ -22,6 +22,20 @@ import java.util.jar.JarOutputStream
 import java.util.zip.ZipEntry
 
 class CachedTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
+    public static final String ORIGINAL_HELLO_WORLD = """
+            public class Hello {
+                public static void main(String... args) {
+                    System.out.println("Hello World!");
+                }
+            }
+        """
+    public static final String CHANGED_HELLO_WORLD = """
+            public class Hello {
+                public static void main(String... args) {
+                    System.out.println("Hello World with Changes!");
+                }
+            }
+        """
     def cacheDir = testDirectoryProvider.createDir("task-cache")
 
     def setup() {
@@ -29,13 +43,7 @@ class CachedTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
             apply plugin: "java"
         """
 
-        file("src/main/java/Hello.java") << """
-            public class Hello {
-                public static void main(String... args) {
-                    System.out.println("Hello World!");
-                }
-            }
-        """
+        file("src/main/java/Hello.java") << ORIGINAL_HELLO_WORLD
         file("src/main/resources/resource.properties") << """
             test=true
         """
@@ -65,6 +73,25 @@ class CachedTaskExecutionIntegrationTest extends AbstractIntegrationSpec {
         succeedsWithCache "assemble"
         nonSkippedTasks.containsAll ":compileJava"
         skippedTasks.containsAll ":processResources", ":jar"
+    }
+
+    def "tasks get cached when source code changes back to previous state"() {
+        expect:
+        succeedsWithCache "compileJava" assertTaskNotSkipped ":compileJava"
+
+        println "\n\n\n-----------------------------------------\n\n\n"
+
+        when:
+        file("src/main/java/Hello.java").text = CHANGED_HELLO_WORLD
+        then:
+        succeedsWithCache "compileJava" assertTaskNotSkipped ":compileJava"
+
+        println "\n\n\n-----------------------------------------\n\n\n"
+
+        when:
+        file("src/main/java/Hello.java").text = ORIGINAL_HELLO_WORLD
+        then:
+        succeedsWithCache "compileJava" assertTaskSkipped ":compileJava"
     }
 
     def "jar tasks get cached even when output file is changed"() {
