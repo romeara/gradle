@@ -392,10 +392,8 @@ public class DefaultTaskOutputs implements TaskOutputsInternal {
                             GFileUtils.mkdirs(outputParent);
                         }
                     }
-                    boolean created = resolved.createNewFile();
-                    if (!created) {
-                        throw new IOException(String.format("Could not create file '%s'", resolved));
-                    }
+                    //noinspection ResultOfMethodCallIgnored
+                    resolved.createNewFile();
                     Files.asByteSink(resolved).writeFrom(data);
                 }
             };
