@@ -188,15 +188,20 @@ public class DaemonStateCoordinator implements Stoppable, DaemonStateControl {
         cancellationToken = new DefaultBuildCancellationToken();
     }
 
-    public void cancelBuild() {
-        long waitUntil = System.currentTimeMillis() + cancelTimeoutMs;
-        Date expiry = new Date(waitUntil);
-        LOGGER.debug("Cancel requested: will wait for daemon to become idle.");
+    public void initiateCancel() {
         try {
             cancellationToken.cancel();
         } catch (Exception ex) {
             LOGGER.error("Cancel processing failed. Will continue.", ex);
         }
+    }
+
+    public void cancelBuild() {
+        long waitUntil = System.currentTimeMillis() + cancelTimeoutMs;
+        Date expiry = new Date(waitUntil);
+        LOGGER.debug("Cancel requested: will wait for daemon to become idle.");
+
+        initiateCancel();
 
         lock.lock();
         try {
@@ -224,7 +229,7 @@ public class DaemonStateCoordinator implements Stoppable, DaemonStateControl {
                 }
             }
             LOGGER.debug("Cancel: daemon is still busy after grace period. Will force stop.");
-            stopNow("cancel requested");
+            stopNow("cancel requested but timed out");
         } finally {
             lock.unlock();
         }
