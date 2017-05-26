@@ -16,11 +16,11 @@
 
 package org.gradle.api.internal.tasks.compile.incremental.jar;
 
+import com.google.common.hash.HashCode;
 import org.gradle.api.internal.cache.MinimalPersistentCache;
 import org.gradle.cache.CacheRepository;
 import org.gradle.internal.Factory;
-import org.gradle.internal.hash.HashValue;
-import org.gradle.internal.serialize.HashValueSerializer;
+import org.gradle.internal.serialize.HashCodeSerializer;
 
 import java.io.File;
 import java.util.HashMap;
@@ -32,19 +32,23 @@ import java.util.Map;
  */
 public class DefaultJarSnapshotCache implements JarSnapshotCache {
 
-    private final MinimalPersistentCache<HashValue, JarSnapshotData> cache;
+    private final MinimalPersistentCache<HashCode, JarSnapshotData> cache;
 
     public DefaultJarSnapshotCache(CacheRepository cacheRepository) {
-        cache = new MinimalPersistentCache<HashValue, JarSnapshotData>(cacheRepository, "jar snapshots", new HashValueSerializer(), new JarSnapshotDataSerializer());
+        cache = new MinimalPersistentCache<HashCode, JarSnapshotData>(cacheRepository, "jar snapshots", new HashCodeSerializer(), new JarSnapshotDataSerializer());
     }
 
     @Override
-    public Map<File, JarSnapshot> getJarSnapshots(final Map<File, HashValue> jarHashes) {
+    public Map<File, JarSnapshot> getJarSnapshots(final Map<File, HashCode> jarHashes) {
         return cache.getCacheAccess().useCache("loading jar snapshots", new Factory<Map<File, JarSnapshot>>() {
             public Map<File, JarSnapshot> create() {
                 final Map<File, JarSnapshot> out = new HashMap<File, JarSnapshot>();
-                for (Map.Entry<File, HashValue> entry : jarHashes.entrySet()) {
-                    JarSnapshot snapshot = new JarSnapshot(cache.getCache().get(entry.getValue()));
+                for (Map.Entry<File, HashCode> entry : jarHashes.entrySet()) {
+                    JarSnapshotData snapshotData = cache.getCache().get(entry.getValue());
+                    if (snapshotData == null) {
+                        throw new IllegalStateException("No Jar snapshot data available for " + entry.getKey() + " with hash " + entry.getValue() + ".");
+                    }
+                    JarSnapshot snapshot = new JarSnapshot(snapshotData);
                     out.put(entry.getKey(), snapshot);
                 }
                 return out;
@@ -53,7 +57,7 @@ public class DefaultJarSnapshotCache implements JarSnapshotCache {
     }
 
     @Override
-    public JarSnapshot get(HashValue key, final Factory<JarSnapshot> factory) {
+    public JarSnapshot get(HashCode key, final Factory<JarSnapshot> factory) {
         return new JarSnapshot(cache.get(key, new Factory<JarSnapshotData>() {
             public JarSnapshotData create() {
                 return factory.create().getData();

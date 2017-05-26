@@ -16,45 +16,39 @@
 
 package org.gradle.tooling.internal.consumer.connection;
 
-import org.gradle.api.Action;
-import org.gradle.tooling.model.ProjectIdentifier;
-import org.gradle.tooling.internal.adapter.SourceObjectMapping;
-import org.gradle.tooling.internal.consumer.converters.*;
+import org.gradle.tooling.internal.adapter.ViewBuilder;
+import org.gradle.tooling.internal.consumer.converters.BasicGradleProjectIdentifierMixin;
+import org.gradle.tooling.internal.consumer.converters.FixedBuildIdentifierProvider;
+import org.gradle.tooling.internal.consumer.converters.GradleProjectIdentifierMixin;
+import org.gradle.tooling.internal.consumer.converters.IdeaModuleDependencyTargetNameMixin;
+import org.gradle.tooling.internal.consumer.converters.IdeaProjectJavaLanguageSettingsMixin;
+import org.gradle.tooling.internal.consumer.converters.IncludedBuildsMixin;
+import org.gradle.tooling.internal.consumer.converters.TaskDisplayNameMixin;
 import org.gradle.tooling.internal.consumer.parameters.ConsumerOperationParameters;
-import org.gradle.tooling.internal.consumer.versioning.VersionDetails;
-import org.gradle.tooling.internal.connection.DefaultProjectIdentifier;
+import org.gradle.tooling.internal.gradle.DefaultProjectIdentifier;
+import org.gradle.tooling.model.GradleProject;
+import org.gradle.tooling.model.GradleTask;
+import org.gradle.tooling.model.gradle.BasicGradleProject;
+import org.gradle.tooling.model.gradle.GradleBuild;
+import org.gradle.tooling.model.idea.IdeaDependency;
+import org.gradle.tooling.model.idea.IdeaProject;
 
 public class HasCompatibilityMapping {
 
-    private final Action<SourceObjectMapping> taskPropertyHandlerMapper;
-    private final Action<SourceObjectMapping> ideaProjectCompatibilityMapper;
-    private final Action<SourceObjectMapping> eclipseProjectDependencyCompatibilityMapper;
-    private final Action<SourceObjectMapping> gradleProjectIdentifierMapper;
-
-    public HasCompatibilityMapping(VersionDetails versionDetails) {
-        taskPropertyHandlerMapper = new TaskDisplayNameCompatibilityMapping(versionDetails);
-        ideaProjectCompatibilityMapper = new IdeaModelCompatibilityMapping(versionDetails);
-        eclipseProjectDependencyCompatibilityMapper = new EclipseModelCompatibilityMapping(versionDetails);
-        gradleProjectIdentifierMapper = new GradleProjectIdentifierCompatibilityMapping();
+    public <T> ViewBuilder<T> applyCompatibilityMapping(ViewBuilder<T> viewBuilder, ConsumerOperationParameters parameters) {
+        DefaultProjectIdentifier projectIdentifier = new DefaultProjectIdentifier(parameters.getProjectDir(), ":");
+        return applyCompatibilityMapping(viewBuilder, projectIdentifier);
     }
 
-    public Action<SourceObjectMapping> getCompatibilityMapping(ConsumerOperationParameters parameters) {
-        ProjectIdentifier projectIdentifier = new DefaultProjectIdentifier(parameters.getBuildIdentifier(), ":");
-        return getCompatibilityMapping(projectIdentifier);
-    }
-
-    public Action<SourceObjectMapping> getCompatibilityMapping(ProjectIdentifier projectIdentifier) {
+    public <T> ViewBuilder<T> applyCompatibilityMapping(ViewBuilder<T> viewBuilder, DefaultProjectIdentifier projectIdentifier) {
+        viewBuilder.mixInTo(GradleProject.class, new GradleProjectIdentifierMixin(projectIdentifier.getBuildIdentifier()));
+        viewBuilder.mixInTo(BasicGradleProject.class, new BasicGradleProjectIdentifierMixin(projectIdentifier.getBuildIdentifier()));
         FixedBuildIdentifierProvider identifierProvider = new FixedBuildIdentifierProvider(projectIdentifier);
-        return getCompatibilityMapping(identifierProvider);
-    }
-
-    private Action<SourceObjectMapping> getCompatibilityMapping(Action<SourceObjectMapping> requestScopedMapping) {
-        return CompositeCompatibilityMapping.builder()
-            .add(taskPropertyHandlerMapper)
-            .add(ideaProjectCompatibilityMapper)
-            .add(eclipseProjectDependencyCompatibilityMapper)
-            .add(gradleProjectIdentifierMapper)
-            .add(requestScopedMapping)
-            .build();
+        identifierProvider.applyTo(viewBuilder);
+        viewBuilder.mixInTo(GradleTask.class, TaskDisplayNameMixin.class);
+        viewBuilder.mixInTo(IdeaProject.class, IdeaProjectJavaLanguageSettingsMixin.class);
+        viewBuilder.mixInTo(IdeaDependency.class, IdeaModuleDependencyTargetNameMixin.class);
+        viewBuilder.mixInTo(GradleBuild.class, new IncludedBuildsMixin());
+        return viewBuilder;
     }
 }

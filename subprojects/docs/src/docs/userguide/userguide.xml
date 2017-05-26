@@ -41,10 +41,12 @@
         <xi:include href='artifactDependenciesTutorial.xml'/>
         <xi:include href='introMultiProjectBuilds.xml'/>
         <xi:include href='continuousBuild.xml'/>
+        <xi:include href='compositeBuilds.xml'/>
         <xi:include href='guiTutorial.xml'/>
         <xi:include href='buildEnvironment.xml'/>
         <xi:include href='troubleshooting.xml'/>
         <xi:include href='embedding.xml'/>
+        <xi:include href='buildCache.xml'/>
     </part>
     <part>
         <title>Writing Gradle build scripts</title>
@@ -107,7 +109,7 @@
         <xi:include href='ideaPlugin.xml'/>
     </part>
     <part>
-        <title>The Software model - Next generation Gradle builds</title>
+        <title>The Software model</title>
         <xi:include href='softwareModel.xml'/>
         <xi:include href='softwareModelConcepts.xml'/>
         <xi:include href='ruleSource.xml'/>

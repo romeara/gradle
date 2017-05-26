@@ -15,7 +15,10 @@
  */
 package org.gradle.api.internal.project.taskfactory;
 
+import org.gradle.api.Nullable;
+
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 
 public interface TaskPropertyActionContext {
     /**
@@ -24,16 +27,47 @@ public interface TaskPropertyActionContext {
     String getName();
 
     /**
+     * Returns the annotation used to mark the property's type.
+     */
+    @Nullable
+    Class<? extends Annotation> getPropertyType();
+
+    /**
      * Returns the declared type of this property. If the property has an instance variable,
      * then returns the declared type of the instance variable. Otherwise returns the return
      * type of the declaring method.
      */
-    Class<?> getType();
+    Class<?> getValueType();
+
+    /**
+     * Sets the instance field of the property.
+     */
+    void setInstanceVariableField(Field field);
+
+    /**
+     * Record annotations encountered during parsing the property's methods and instance field.
+     */
+    void addAnnotations(Iterable<? extends Annotation> declaredAnnotations);
 
     /**
      * Returns whether the given annotation is present on the field or any of the methods declaring the property.
      */
     boolean isAnnotationPresent(Class<? extends Annotation> annotationType);
+
+    /**
+     * Returns the given annotation if present on the field or any of the methods declaring the property.
+     */
+    <A extends Annotation> A getAnnotation(Class<A> annotationType);
+
+    /**
+     * @return Is this an optional property (value may be null)?
+     */
+    boolean isOptional();
+
+    /**
+     * Sets whether the property allows null values.
+     */
+    void setOptional(boolean optional);
 
     /**
      * Specifies the action used to validate the value of this property. This action is only executed when the property
@@ -47,5 +81,8 @@ public interface TaskPropertyActionContext {
      */
     void setConfigureAction(UpdateAction action);
 
-    void attachActions(Class<?> type);
+    /**
+     * Process a nested property with the given name.
+     */
+    void setNestedType(Class<?> type);
 }

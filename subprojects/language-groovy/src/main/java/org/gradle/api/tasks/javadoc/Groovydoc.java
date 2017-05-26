@@ -19,17 +19,21 @@ package org.gradle.api.tasks.javadoc;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Nullable;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
 import org.gradle.api.internal.ClassPathRegistry;
 import org.gradle.api.internal.project.IsolatedAntBuilder;
 import org.gradle.api.internal.tasks.AntGroovydoc;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.resources.TextResource;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskAction;
 
@@ -39,7 +43,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -54,6 +58,7 @@ import java.util.Set;
  * that the Groovydoc tool has some limitations at the moment. The version of the Groovydoc
  * that is used, is the one from the Groovy dependency defined in the build script.
  */
+@CacheableTask
 public class Groovydoc extends SourceTask {
     private FileCollection groovyClasspath;
 
@@ -79,7 +84,7 @@ public class Groovydoc extends SourceTask {
 
     private TextResource overview;
 
-    private Set<Link> links = new HashSet<Link>();
+    private Set<Link> links = new LinkedHashSet<Link>();
 
     boolean includePrivate;
 
@@ -111,6 +116,15 @@ public class Groovydoc extends SourceTask {
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @PathSensitive(PathSensitivity.RELATIVE)
+    @Override
+    public FileTree getSource() {
+        return super.getSource();
+    }
+
+    /**
      * Returns the directory to generate the documentation into.
      *
      * @return The directory to generate the documentation into
@@ -132,7 +146,7 @@ public class Groovydoc extends SourceTask {
      *
      * @return The classpath containing the Groovy library to be used
      */
-    @InputFiles
+    @Classpath
     public FileCollection getGroovyClasspath() {
         return groovyClasspath;
     }
@@ -149,7 +163,7 @@ public class Groovydoc extends SourceTask {
      *
      * @return The classpath used to locate classes referenced by the documented sources
      */
-    @InputFiles
+    @Classpath
     public FileCollection getClasspath() {
         return classpath;
     }

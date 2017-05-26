@@ -20,35 +20,24 @@ import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphNode;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph.DependencyGraphVisitor;
-import org.gradle.internal.component.local.model.LocalConfigurationMetadata;
-import org.gradle.internal.component.model.ConfigurationMetadata;
 
-public class ResolvedLocalComponentsResultGraphVisitor implements DependencyGraphVisitor {
-    private final ResolvedLocalComponentsResultBuilder builder;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ResolvedLocalComponentsResultGraphVisitor implements DependencyGraphVisitor, ResolvedLocalComponentsResult {
+    private final List<ResolvedProjectConfiguration> resolvedProjectConfigurations = new ArrayList<ResolvedProjectConfiguration>();
     private ComponentIdentifier rootId;
-
-    public ResolvedLocalComponentsResultGraphVisitor(ResolvedLocalComponentsResultBuilder builder) {
-        this.builder = builder;
-    }
 
     @Override
     public void start(DependencyGraphNode root) {
-        rootId = root.getComponentId();
+        this.rootId = root.getOwner().getComponentId();
     }
 
     @Override
     public void visitNode(DependencyGraphNode resolvedConfiguration) {
-        if (rootId.equals(resolvedConfiguration.getComponentId())) {
-            return;
-        }
-
-        ComponentIdentifier componentId = resolvedConfiguration.getComponentId();
-        if (componentId instanceof ProjectComponentIdentifier) {
-            builder.projectConfigurationResolved((ProjectComponentIdentifier) componentId, resolvedConfiguration.getNodeId().getConfiguration());
-        }
-        ConfigurationMetadata configurationMetadata = resolvedConfiguration.getMetaData();
-        if (configurationMetadata instanceof LocalConfigurationMetadata) {
-            builder.localComponentResolved(componentId, ((LocalConfigurationMetadata) configurationMetadata).getDirectBuildDependencies());
+        ComponentIdentifier componentId = resolvedConfiguration.getOwner().getComponentId();
+        if (!rootId.equals(componentId) && componentId instanceof ProjectComponentIdentifier) {
+            resolvedProjectConfigurations.add(new DefaultResolvedProjectConfiguration((ProjectComponentIdentifier) componentId, resolvedConfiguration.getResolvedConfigurationId().getConfiguration()));
         }
     }
 
@@ -58,5 +47,14 @@ public class ResolvedLocalComponentsResultGraphVisitor implements DependencyGrap
 
     @Override
     public void finish(DependencyGraphNode root) {
+    }
+
+    @Override
+    public Iterable<ResolvedProjectConfiguration> getResolvedProjectConfigurations() {
+        return resolvedProjectConfigurations;
+    }
+
+    public ResolvedLocalComponentsResult complete() {
+        return this;
     }
 }

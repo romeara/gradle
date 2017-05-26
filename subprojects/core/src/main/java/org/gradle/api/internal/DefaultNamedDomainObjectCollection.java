@@ -16,6 +16,7 @@
 package org.gradle.api.internal;
 
 import groovy.lang.Closure;
+import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.NamedDomainObjectCollection;
 import org.gradle.api.Namer;
@@ -237,6 +238,13 @@ public class DefaultNamedDomainObjectCollection<T> extends DefaultDomainObjectCo
         return t;
     }
 
+    @Override
+    public T getByName(String name, Action<? super T> configureAction) throws UnknownDomainObjectException {
+        T t = getByName(name);
+        configureAction.execute(t);
+        return t;
+    }
+
     public T getAt(String name) throws UnknownDomainObjectException {
         return getByName(name);
     }
@@ -282,22 +290,25 @@ public class DefaultNamedDomainObjectCollection<T> extends DefaultDomainObjectCo
     }
 
     public Rule addRule(final String description, final Closure ruleAction) {
-        Rule rule = new Rule() {
+        return addRule(description, ClosureBackedAction.<String>of(ruleAction));
+    }
+
+    @Override
+    public Rule addRule(final String description, final Action<String> ruleAction) {
+        return addRule(new Rule() {
             public String getDescription() {
                 return description;
             }
 
             public void apply(String taskName) {
-                ruleAction.call(taskName);
+                ruleAction.execute(taskName);
             }
 
             @Override
             public String toString() {
                 return "Rule: " + description;
             }
-        };
-        rules.add(rule);
-        return rule;
+        });
     }
 
     public List<Rule> getRules() {

@@ -25,12 +25,11 @@ import org.gradle.internal.FileUtils;
 import org.gradle.internal.operations.BuildOperationProcessor;
 import org.gradle.internal.operations.BuildOperationQueue;
 import org.gradle.internal.operations.RunnableBuildOperation;
-import org.gradle.util.Clock;
+import org.gradle.internal.time.Timer;
+import org.gradle.internal.time.Timers;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 public class Binary2JUnitXmlReportGenerator {
 
@@ -40,15 +39,15 @@ public class Binary2JUnitXmlReportGenerator {
     private final BuildOperationProcessor buildOperationProcessor;
     private final static Logger LOG = Logging.getLogger(Binary2JUnitXmlReportGenerator.class);
 
-    public Binary2JUnitXmlReportGenerator(File testResultsDir, TestResultsProvider testResultsProvider, TestOutputAssociation outputAssociation, BuildOperationProcessor buildOperationProcessor) {
+    public Binary2JUnitXmlReportGenerator(File testResultsDir, TestResultsProvider testResultsProvider, TestOutputAssociation outputAssociation, BuildOperationProcessor buildOperationProcessor, String hostName) {
         this.testResultsDir = testResultsDir;
         this.testResultsProvider = testResultsProvider;
-        this.xmlWriter = new JUnitXmlResultWriter(getHostname(), testResultsProvider, outputAssociation);
+        this.xmlWriter = new JUnitXmlResultWriter(hostName, testResultsProvider, outputAssociation);
         this.buildOperationProcessor = buildOperationProcessor;
     }
 
     public void generate() {
-        Clock clock = new Clock();
+        Timer clock = Timers.startTimer();
 
         buildOperationProcessor.run(new Action<BuildOperationQueue<JUnitXmlReportFileGenerator>>() {
             @Override
@@ -62,19 +61,11 @@ public class Binary2JUnitXmlReportGenerator {
             }
         });
 
-        LOG.info("Finished generating test XML results ({}) into: {}", clock.getTime(), testResultsDir);
+        LOG.info("Finished generating test XML results ({}) into: {}", clock.getElapsed(), testResultsDir);
     }
 
     private String getReportFileName(TestClassResult result) {
         return "TEST-" + FileUtils.toSafeFileName(result.getClassName()) + ".xml";
-    }
-
-    private static String getHostname() {
-        try {
-            return InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            return "localhost";
-        }
     }
 
     private static class JUnitXmlReportFileGenerator implements RunnableBuildOperation {

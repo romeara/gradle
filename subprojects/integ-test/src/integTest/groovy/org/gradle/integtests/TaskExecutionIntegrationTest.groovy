@@ -16,6 +16,8 @@
 
 package org.gradle.integtests
 
+import groovy.transform.NotYetImplemented
+import org.gradle.api.CircularReferenceException
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import spock.lang.Ignore
 import spock.lang.Issue
@@ -27,15 +29,17 @@ public class TaskExecutionIntegrationTest extends AbstractIntegrationSpec {
     def taskCanAccessTaskGraph() {
         buildFile << """
     boolean notified = false
-    task a(dependsOn: 'b') << { task ->
-        assert notified
-        assert gradle.taskGraph.hasTask(task)
-        assert gradle.taskGraph.hasTask(':a')
-        assert gradle.taskGraph.hasTask(a)
-        assert gradle.taskGraph.hasTask(':b')
-        assert gradle.taskGraph.hasTask(b)
-        assert gradle.taskGraph.allTasks.contains(task)
-        assert gradle.taskGraph.allTasks.contains(tasks.getByName('b'))
+    task a(dependsOn: 'b') {
+        doLast { task ->
+            assert notified
+            assert gradle.taskGraph.hasTask(task)
+            assert gradle.taskGraph.hasTask(':a')
+            assert gradle.taskGraph.hasTask(a)
+            assert gradle.taskGraph.hasTask(':b')
+            assert gradle.taskGraph.hasTask(b)
+            assert gradle.taskGraph.allTasks.contains(task)
+            assert gradle.taskGraph.allTasks.contains(tasks.getByName('b'))
+        }
     }
     task b
     gradle.taskGraph.whenReady { graph ->
@@ -58,10 +62,16 @@ public class TaskExecutionIntegrationTest extends AbstractIntegrationSpec {
     def executesAllTasksInASingleBuildAndEachTaskAtMostOnce() {
         buildFile << """
     gradle.taskGraph.whenReady { assert !project.hasProperty('graphReady'); ext.graphReady = true }
-    task a << { task -> project.ext.executedA = task }
-    task b << { 
-        assert a == project.executedA
-        assert gradle.taskGraph.hasTask(':a')
+    task a {
+        doLast { task ->
+            project.ext.executedA = task
+        }
+    }
+    task b {
+        doLast {
+            assert a == project.executedA
+            assert gradle.taskGraph.hasTask(':a')
+        }
     }
     task c(dependsOn: a)
     task d(dependsOn: a)
@@ -106,8 +116,8 @@ public class TaskExecutionIntegrationTest extends AbstractIntegrationSpec {
 
     def doesNotExecuteTaskActionsWhenDryRunSpecified() {
         buildFile << """
-    task a << { fail() }
-    task b(dependsOn: a) << { fail() }
+    task a { doLast { fail() } }
+    task b(dependsOn: a) { doLast { fail() } }
     defaultTasks 'b'
 """
 
@@ -121,7 +131,7 @@ public class TaskExecutionIntegrationTest extends AbstractIntegrationSpec {
     def executesTaskActionsInCorrectEnvironment() {
         buildFile << """
     // An action attached to built-in task
-    task a << { assert Thread.currentThread().contextClassLoader == getClass().classLoader }
+    task a { doLast { assert Thread.currentThread().contextClassLoader == getClass().classLoader } }
 
     // An action defined by a custom task
     task b(type: CustomTask)
@@ -279,7 +289,7 @@ task someTask(dependsOn: [someDep, someOtherDep])
 
     def "explicit tasks are preferred over placeholder tasks"() {
         buildFile << """
-        task someTask << {println "explicit sometask"}
+        task someTask { doLast {println "explicit sometask"} }
         tasks.addPlaceholderAction("someTask", DefaultTask) {
             println  "placeholder action triggered"
             it.doLast { throw new RuntimeException() }
@@ -465,5 +475,155 @@ task someTask(dependsOn: [someDep, someOtherDep])
 
         then:
         executedTasks == [':g', ':c', ':b', ':h', ':a', ':f', ':d', ':e']
+    }
+
+    @Issue("GRADLE-3575")
+    def "honours task ordering with finalizers on finalizers"() {
+        buildFile << """
+            class NotParallel extends DefaultTask {}
+
+            task a(type: NotParallel) {
+                dependsOn 'c', 'g'
+            }
+
+            task b(type: NotParallel) {
+                dependsOn 'd'
+                finalizedBy 'e'
+            }
+
+            task c(type: NotParallel) {
+                dependsOn 'd'
+            }
+
+            task d(type: NotParallel) {
+                dependsOn 'f'
+            }
+
+            task e(type: NotParallel) {
+                finalizedBy 'h'
+            }
+
+            task f(type: NotParallel) {
+                finalizedBy 'h'
+            }
+
+            task g(type: NotParallel) {
+                dependsOn 'd'
+            }
+
+            task h(type: NotParallel)
+        """
+
+        when:
+        succeeds 'a'
+
+        then:
+        executedTasks == [':f', ':h', ':d', ':c', ':g', ':a']
+
+        when:
+        succeeds 'b'
+
+        then:
+        executedTasks == [':f', ':d', ':b', ':e', ':h']
+
+        when:
+        succeeds 'a', 'b'
+
+        then:
+        executedTasks == [':f', ':d', ':c', ':g', ':a', ':b', ':e', ':h']
+
+        when:
+        succeeds 'b', 'a'
+
+        then:
+        executedTasks == [':f', ':d', ':b', ':e', ':h', ':c', ':g', ':a']
+    }
+
+    @Issue("gradle/gradle#783")
+    def "executes finalizer task as soon as possible after finalized task"() {
+        buildFile << """
+            class NotParallel extends DefaultTask {}
+
+            project(":a") {
+                task jar(type: NotParallel) {
+                  dependsOn "compileJava"
+                }
+                task compileJava(type: NotParallel) {
+                  dependsOn ":b:jar"
+                  finalizedBy "compileFinalizer"
+                }
+                task compileFinalizer(type: NotParallel)
+            }
+
+            project(":b") {
+                task jar(type: NotParallel)
+            }
+
+            task build(type: NotParallel) {
+              dependsOn ":a:jar"
+              dependsOn ":b:jar"
+            }
+        """
+        settingsFile << "include 'a', 'b'"
+
+        when:
+        succeeds ':build'
+
+        then:
+        executedTasks == [':b:jar', ':a:compileJava', ':a:compileFinalizer', ':a:jar', ':build']
+    }
+
+    @Issue(["gradle/gradle#769", "gradle/gradle#841"])
+    def "execution succeed in presence of long dependency chain"() {
+        def count = 9000
+        buildFile << """
+            class NotParallel extends DefaultTask {}
+
+            task a(type: NotParallel) {
+                finalizedBy 'f'
+            }
+
+            task f(type: NotParallel) {
+                dependsOn "d_0"
+            }
+
+            def nextIndex
+            ${count}.times {
+                nextIndex = it + 1
+                task "d_\$it"(type: NotParallel) { task ->
+                    dependsOn "d_\$nextIndex"
+                }
+            }
+            task "d_\$nextIndex"(type: NotParallel)
+        """
+
+        when:
+        succeeds 'a'
+
+        then:
+
+        executedTasks == [':a'] + (count..0).collect { ":d_$it" } + [':f']
+    }
+
+    @NotYetImplemented
+    @Issue("gradle/gradle#767")
+    def "detect a cycle when a task finalized itself"() {
+        buildFile << """
+            class NotParallel extends DefaultTask {}
+
+            task a(type: NotParallel) {
+                finalizedBy "b"
+            }
+
+            task b(type: NotParallel) {
+                finalizedBy "b"
+            }
+        """
+
+        when:
+        fails 'a'
+
+        then:
+        thrown(CircularReferenceException)
     }
 }

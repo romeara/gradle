@@ -16,44 +16,29 @@
 
 package org.gradle.internal.component.local.model;
 
-import org.gradle.api.Buildable;
 import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.tasks.TaskDependency;
-import org.gradle.internal.component.model.ComponentArtifactMetadata;
 import org.gradle.internal.component.model.DefaultIvyArtifactName;
 import org.gradle.internal.component.model.IvyArtifactName;
-import org.gradle.util.GUtil;
 
 import java.io.File;
 
-public class PublishArtifactLocalArtifactMetadata implements LocalComponentArtifactIdentifier, ComponentArtifactMetadata, Buildable {
+public class PublishArtifactLocalArtifactMetadata implements LocalComponentArtifactMetadata, ComponentArtifactIdentifier {
     private final ComponentIdentifier componentIdentifier;
-    private final String componentDisplayName;
     private final PublishArtifact publishArtifact;
 
-    // The componentDisplayName parameter is temporary
-    public PublishArtifactLocalArtifactMetadata(ComponentIdentifier componentIdentifier, String componentDisplayName, PublishArtifact publishArtifact) {
+    public PublishArtifactLocalArtifactMetadata(ComponentIdentifier componentIdentifier, PublishArtifact publishArtifact) {
         this.componentIdentifier = componentIdentifier;
-        this.componentDisplayName = componentDisplayName;
         this.publishArtifact = publishArtifact;
     }
 
     public String getDisplayName() {
         StringBuilder result = new StringBuilder();
-        result.append(publishArtifact.getName());
-        String classifier = publishArtifact.getClassifier();
-        if (GUtil.isTrue(classifier)) {
-            result.append("-");
-            result.append(classifier);
-        }
-        String extension = publishArtifact.getExtension();
-        if (GUtil.isTrue(extension)) {
-            result.append(".");
-            result.append(extension);
-        }
+        result.append(getName());
         result.append(" (")
-              .append(componentDisplayName)
+              .append(componentIdentifier.getDisplayName())
               .append(")");
         return result.toString();
     }
@@ -73,7 +58,7 @@ public class PublishArtifactLocalArtifactMetadata implements LocalComponentArtif
     }
 
     @Override
-    public LocalComponentArtifactIdentifier getId() {
+    public ComponentArtifactIdentifier getId() {
         return this;
     }
 

@@ -15,8 +15,12 @@
  */
 package org.gradle.initialization;
 
+import com.google.common.collect.Maps;
 import org.gradle.StartParameter;
+import org.gradle.api.Action;
 import org.gradle.api.UnknownProjectException;
+import org.gradle.api.initialization.ConfigurableIncludedBuild;
+import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.initialization.ProjectDescriptor;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.internal.GradleInternal;
@@ -30,11 +34,14 @@ import org.gradle.api.internal.project.AbstractPluginAware;
 import org.gradle.api.internal.project.ProjectRegistry;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.groovy.scripts.ScriptSource;
+import org.gradle.internal.Actions;
+import org.gradle.internal.Cast;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.service.scopes.ServiceRegistryFactory;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Map;
 
 public class DefaultSettings extends AbstractPluginAware implements SettingsInternal {
     public static final String DEFAULT_BUILD_SRC_DIR = "buildSrc";
@@ -50,19 +57,20 @@ public class DefaultSettings extends AbstractPluginAware implements SettingsInte
 
     private GradleInternal gradle;
 
-    private final ClassLoaderScope classLoaderScope;
-    private final ClassLoaderScope rootClassLoaderScope;
+    private final ClassLoaderScope settingsClassLoaderScope;
+    private final ClassLoaderScope buildRootClassLoaderScope;
     private final ServiceRegistry services;
+    private final Map<File, ConfigurableIncludedBuild> includedBuilds = Maps.newLinkedHashMap();
 
     public DefaultSettings(ServiceRegistryFactory serviceRegistryFactory, GradleInternal gradle,
-                           ClassLoaderScope classLoaderScope, ClassLoaderScope rootClassLoaderScope, File settingsDir,
+                           ClassLoaderScope settingsClassLoaderScope, ClassLoaderScope buildRootClassLoaderScope, File settingsDir,
                            ScriptSource settingsScript, StartParameter startParameter) {
         this.gradle = gradle;
-        this.rootClassLoaderScope = rootClassLoaderScope;
+        this.buildRootClassLoaderScope = buildRootClassLoaderScope;
         this.settingsDir = settingsDir;
         this.settingsScript = settingsScript;
         this.startParameter = startParameter;
-        this.classLoaderScope = classLoaderScope;
+        this.settingsClassLoaderScope = settingsClassLoaderScope;
         services = serviceRegistryFactory.createFor(this);
         rootProjectDescriptor = createProjectDescriptor(null, settingsDir.getName(), settingsDir);
     }
@@ -198,11 +206,11 @@ public class DefaultSettings extends AbstractPluginAware implements SettingsInte
     }
 
     public ClassLoaderScope getRootClassLoaderScope() {
-        return rootClassLoaderScope;
+        return buildRootClassLoaderScope;
     }
 
     public ClassLoaderScope getClassLoaderScope() {
-        return classLoaderScope;
+        return settingsClassLoaderScope;
     }
 
     protected ServiceRegistry getServices() {
@@ -225,7 +233,33 @@ public class DefaultSettings extends AbstractPluginAware implements SettingsInte
     }
 
     @Inject
+    protected IncludedBuildFactory getIncludedBuildFactory() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Inject
     public PluginManagerInternal getPluginManager() {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void includeBuild(Object rootProject) {
+        includeBuild(rootProject, Actions.<ConfigurableIncludedBuild>doNothing());
+    }
+
+    @Override
+    public void includeBuild(Object rootProject, Action<ConfigurableIncludedBuild> configuration) {
+        File projectDir = getFileResolver().resolve(rootProject);
+        ConfigurableIncludedBuild build = includedBuilds.get(projectDir);
+        if (build == null) {
+            build = getIncludedBuildFactory().createBuild(projectDir);
+            includedBuilds.put(projectDir, build);
+        }
+        configuration.execute(build);
+    }
+
+    @Override
+    public Map<File, IncludedBuild> getIncludedBuilds() {
+        return Cast.uncheckedCast(includedBuilds);
     }
 }

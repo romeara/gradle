@@ -16,24 +16,39 @@
 
 package org.gradle.api.tasks.wrapper;
 
+import com.google.common.io.ByteStreams;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.plugins.StartScriptGenerator;
 import org.gradle.api.internal.tasks.options.Option;
+import org.gradle.api.internal.tasks.options.OptionValues;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.util.*;
+import org.gradle.internal.IoActions;
+import org.gradle.internal.UncheckedException;
+import org.gradle.util.DistributionLocator;
+import org.gradle.util.GUtil;
+import org.gradle.util.GradleVersion;
+import org.gradle.util.WrapUtil;
 import org.gradle.wrapper.GradleWrapperMain;
 import org.gradle.wrapper.Install;
 import org.gradle.wrapper.WrapperExecutor;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.net.URL;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * <p>Generates scripts (for *nix and windows) which allow you to build your project with Gradle, without having to
@@ -51,6 +66,20 @@ public class Wrapper extends DefaultTask {
     public static final String DEFAULT_DISTRIBUTION_PARENT_NAME = Install.DEFAULT_DISTRIBUTION_PATH;
 
     /**
+     * Specifies the Gradle distribution type.
+     */
+    public enum DistributionType {
+        /**
+         * binary-only Gradle distribution without sources and documentation
+         */
+        BIN,
+        /**
+         * complete Gradle distribution with binaries, sources and documentation
+         */
+        ALL
+    }
+
+    /**
      * Specifies how the wrapper path should be interpreted.
      */
     public enum PathBase {
@@ -63,6 +92,7 @@ public class Wrapper extends DefaultTask {
     private PathBase distributionBase = PathBase.GRADLE_USER_HOME;
     private String distributionUrl;
     private GradleVersion gradleVersion;
+    private DistributionType distributionType = DistributionType.BIN;
     private String archivePath;
     private PathBase archiveBase = PathBase.GRADLE_USER_HOME;
     private final DistributionLocator locator = new DistributionLocator();
@@ -88,12 +118,7 @@ public class Wrapper extends DefaultTask {
         String jarFileRelativePath = resolver.resolveAsRelativePath(jarFileDestination);
 
         writeProperties(getPropertiesFile());
-
-        URL jarFileSource = Wrapper.class.getResource("/gradle-wrapper.jar");
-        if (jarFileSource == null) {
-            throw new GradleException("Cannot locate wrapper JAR resource.");
-        }
-        GFileUtils.copyURLToFile(jarFileSource, jarFileDestination);
+        writeWrapperTo(jarFileDestination);
 
         StartScriptGenerator generator = new StartScriptGenerator();
         generator.setApplicationName("Gradle");
@@ -105,6 +130,40 @@ public class Wrapper extends DefaultTask {
         generator.setScriptRelPath(unixScript.getName());
         generator.generateUnixScript(unixScript);
         generator.generateWindowsScript(getBatchScript());
+    }
+
+    private void writeWrapperTo(File destination) {
+        InputStream gradleWrapperJar = Wrapper.class.getResourceAsStream("/gradle-wrapper.jar");
+        if (gradleWrapperJar == null) {
+            throw new GradleException("Cannot locate wrapper JAR resource.");
+        }
+        ZipInputStream zipInputStream = null;
+        ZipOutputStream zipOutputStream = null;
+        try {
+            zipInputStream = new ZipInputStream(gradleWrapperJar);
+            zipOutputStream = new ZipOutputStream(new FileOutputStream(destination));
+            for (ZipEntry entry = zipInputStream.getNextEntry(); entry != null; entry = zipInputStream.getNextEntry()) {
+                zipOutputStream.putNextEntry(entry);
+                if (!entry.isDirectory()) {
+                    ByteStreams.copy(zipInputStream, zipOutputStream);
+                }
+                zipOutputStream.closeEntry();
+            }
+            addBuildReceipt(zipOutputStream);
+        } catch (IOException e) {
+            throw UncheckedException.throwAsUncheckedException(e);
+        } finally {
+            IoActions.closeQuietly(zipInputStream);
+            IoActions.closeQuietly(zipOutputStream);
+        }
+    }
+
+    private void addBuildReceipt(ZipOutputStream zipOutputStream) throws IOException {
+        ZipEntry buildReceipt = new ZipEntry("build-receipt.properties");
+        zipOutputStream.putNextEntry(buildReceipt);
+        String contents = "versionNumber=" + GradleVersion.current().getVersion();
+        zipOutputStream.write(contents.getBytes(StandardCharsets.ISO_8859_1));
+        zipOutputStream.closeEntry();
     }
 
     private void writeProperties(File propertiesFileDestination) {
@@ -207,6 +266,35 @@ public class Wrapper extends DefaultTask {
     }
 
     /**
+     * Returns the type of the Gradle distribution to be used by the wrapper.
+     *
+     * @see #setDistributionType(DistributionType)
+     */
+    @Input
+    public DistributionType getDistributionType() {
+        return distributionType;
+    }
+
+    /**
+     * The type of the Gradle distribution to be used by the wrapper. By default, this is {@link DistributionType#BIN},
+     * which is the binary-only Gradle distribution without documentation.
+     *
+     * @see DistributionType
+     */
+    @Option(option = "distribution-type", description = "The type of the Gradle distribution to be used by the wrapper.")
+    public void setDistributionType(DistributionType distributionType) {
+        this.distributionType = distributionType;
+    }
+
+    /**
+     * The list of available gradle distribution types.
+     */
+    @OptionValues("distribution-type")
+    public List<DistributionType> getAvailableDistributionTypes() {
+        return Arrays.asList(DistributionType.values());
+    }
+
+    /**
      * The URL to download the gradle distribution from.
      *
      * <p>If not set, the download URL is the default for the specified {@link #getGradleVersion()}.
@@ -223,7 +311,7 @@ public class Wrapper extends DefaultTask {
         if (distributionUrl != null) {
             return distributionUrl;
         } else if (gradleVersion != null) {
-            return locator.getDistributionFor(gradleVersion).toString();
+            return locator.getDistributionFor(gradleVersion, distributionType.name().toLowerCase()).toString();
         } else {
             return null;
         }
@@ -241,7 +329,7 @@ public class Wrapper extends DefaultTask {
      * all. This might be in particular interesting, if you provide a custom gradle snapshot to the wrapper, because you
      * don't need to provide a download server then.
      */
-    @Option(option = "gradle-distribution-url", description = "The URL to download the gradle distribution from.")
+    @Option(option = "gradle-distribution-url", description = "The URL to download the Gradle distribution from.")
     public void setDistributionUrl(String url) {
         this.distributionUrl = url;
     }

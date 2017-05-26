@@ -39,6 +39,7 @@ class NativePlatformSamplesIntegrationTest extends AbstractInstalledToolChainInt
     @Rule public final Sample prebuilt = sample(testDirProvider, 'prebuilt')
     @Rule public final Sample targetPlatforms = sample(testDirProvider, 'target-platforms')
     @Rule public final Sample sourcesetVariant = sample(testDirectoryProvider, "sourceset-variant")
+    @Rule public final Sample customCheck = sample(testDirectoryProvider, "custom-check")
 
     private static Sample sample(TestDirectoryProvider testDirectoryProvider, String name) {
         return new Sample(testDirectoryProvider, "native-binaries/${name}", name)
@@ -139,11 +140,11 @@ class NativePlatformSamplesIntegrationTest extends AbstractInstalledToolChainInt
         final debugIA64 = executable(variants.dir.file("build/exe/main/itanium/debug/main"))
         final releaseIA64 = executable(variants.dir.file("build/exe/main/itanium/release/main"))
 
-        debugX86.binaryInfo.arch.name == "x86"
+        debugX86.arch.name == "x86"
         debugX86.assertDebugFileExists()
         debugX86.exec().out == "Hello world!\n"
 
-        releaseX86.binaryInfo.arch.name == "x86"
+        releaseX86.arch.name == "x86"
         releaseX86.assertDebugFileDoesNotExist()
         releaseX86.exec().out == "Hello world!\n"
 
@@ -152,8 +153,8 @@ class NativePlatformSamplesIntegrationTest extends AbstractInstalledToolChainInt
             debugX64.assertDoesNotExist()
             releaseX64.assertDoesNotExist()
         } else {
-            debugX64.binaryInfo.arch.name == "x86_64"
-            releaseX64.binaryInfo.arch.name == "x86_64"
+            debugX64.arch.name == "x86_64"
+            releaseX64.arch.name == "x86_64"
         }
 
         // Itanium not built
@@ -217,7 +218,7 @@ model {
 
         then:
         executable(targetPlatforms.dir.file("build/exe/main/arm/main")).exec().out == "Hello from ${toolChain.typeDisplayName}!\n"
-        executable(targetPlatforms.dir.file("build/exe/main/arm/main")).binaryInfo.arch.isI386()
+        executable(targetPlatforms.dir.file("build/exe/main/arm/main")).arch.isI386()
 
         executable(targetPlatforms.dir.file("build/exe/main/sparc/main")).exec().out == "Hello from ${toolChain.typeDisplayName}!\n"
     }
@@ -269,5 +270,25 @@ Util build type: RELEASE
         and:
         executable(sourcesetVariant.dir.file("build/exe/main/main")).assertExists()
         installation(sourcesetVariant.dir.file("build/install/main")).exec().out.contains("Attributes of '$platformName' platform")
+    }
+
+    def customcheck() {
+        given:
+        sample customCheck
+
+        when:
+        run 'check'
+
+        then:
+        executedAndNotSkipped(':myCustomCheck')
+
+        and:
+        sample customCheck
+
+        when:
+        run ':checkHelloSharedLibrary'
+
+        then:
+        executedAndNotSkipped(':myCustomCheck')
     }
 }

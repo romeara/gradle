@@ -24,6 +24,7 @@ import org.gradle.api.tasks.Console;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
+import org.gradle.util.DeprecationLogger;
 import org.gradle.util.SingleMessageLogger;
 
 import java.util.List;
@@ -237,7 +238,9 @@ public class CompileOptions extends AbstractOptions {
      * {@code false}.
      */
     @Input
+    @Deprecated
     public boolean isUseDepend() {
+        DeprecationLogger.nagUserOfDiscontinuedMethod("CompileOptions.isUseDepend()");
         return useDepend;
     }
 
@@ -246,7 +249,9 @@ public class CompileOptions extends AbstractOptions {
      * Only takes effect if {@code useAnt} is {@code true}. Defaults to
      * {@code false}.
      */
+    @Deprecated
     public void setUseDepend(boolean useDepend) {
+        DeprecationLogger.nagUserOfDiscontinuedMethod("CompileOptions.setUseDepend()");
         this.useDepend = useDepend;
     }
 
@@ -300,6 +305,13 @@ public class CompileOptions extends AbstractOptions {
     /**
      * Returns any additional arguments to be passed to the compiler.
      * Defaults to the empty list.
+     *
+     * Compiler arguments not supported by the DSL can be added here. For example, it is possible
+     * to pass the {@code -release} option of JDK 9:
+     * <pre><code>compilerArgs.addAll(['-release', '7'])</code></pre>
+     *
+     * Note that if {@code -release} is added then {@code -target} and {@code -source}
+     * are ignored.
      */
     @Input
     public List<String> getCompilerArgs() {
@@ -338,7 +350,9 @@ public class CompileOptions extends AbstractOptions {
      * Convenience method to set {@link DependOptions} with named parameter syntax.
      * Calling this method will set {@code useDepend} to {@code true}.
      */
+    @Deprecated
     public CompileOptions depend(Map<String, Object> dependArgs) {
+        DeprecationLogger.nagUserOfDiscontinuedMethod("CompileOptions.depend()");
         useDepend = true;
         dependOptions.define(dependArgs);
         return this;

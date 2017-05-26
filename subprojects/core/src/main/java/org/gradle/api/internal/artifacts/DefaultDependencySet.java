@@ -16,21 +16,20 @@
 package org.gradle.api.internal.artifacts;
 
 import org.gradle.api.DomainObjectSet;
+import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
-import org.gradle.api.artifacts.SelfResolvingDependency;
 import org.gradle.api.internal.DelegatingDomainObjectSet;
-import org.gradle.api.internal.tasks.AbstractTaskDependency;
-import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.api.tasks.TaskDependency;
 
 public class DefaultDependencySet extends DelegatingDomainObjectSet<Dependency> implements DependencySet {
-    private final TaskDependency builtBy = new DependencySetTaskDependency();
     private final String displayName;
+    private final Configuration clientConfiguration;
 
-    public DefaultDependencySet(String displayName, DomainObjectSet<Dependency> backingSet) {
+    public DefaultDependencySet(String displayName, Configuration clientConfiguration, DomainObjectSet<Dependency> backingSet) {
         super(backingSet);
         this.displayName = displayName;
+        this.clientConfiguration = clientConfiguration;
     }
 
     @Override
@@ -39,20 +38,6 @@ public class DefaultDependencySet extends DelegatingDomainObjectSet<Dependency> 
     }
 
     public TaskDependency getBuildDependencies() {
-        return builtBy;
-    }
-
-    private class DependencySetTaskDependency extends AbstractTaskDependency {
-        @Override
-        public String toString() {
-            return "build dependencies " + DefaultDependencySet.this;
-        }
-
-        @Override
-        public void visitDependencies(TaskDependencyResolveContext context) {
-            for (SelfResolvingDependency dependency : DefaultDependencySet.this.withType(SelfResolvingDependency.class)) {
-                context.add(dependency);
-            }
-        }
+        return clientConfiguration.getBuildDependencies();
     }
 }

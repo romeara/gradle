@@ -16,13 +16,16 @@
 
 package org.gradle.invocation;
 
+import com.google.common.collect.Lists;
 import groovy.lang.Closure;
 import org.gradle.BuildAdapter;
 import org.gradle.BuildListener;
 import org.gradle.StartParameter;
 import org.gradle.api.Action;
+import org.gradle.api.Nullable;
 import org.gradle.api.Project;
 import org.gradle.api.ProjectEvaluationListener;
+import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.file.FileResolver;
 import org.gradle.api.internal.initialization.ClassLoaderScope;
@@ -32,6 +35,8 @@ import org.gradle.api.internal.plugins.PluginManagerInternal;
 import org.gradle.api.internal.project.AbstractPluginAware;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.invocation.Gradle;
+import org.gradle.caching.internal.BuildCacheConfiguration;
+import org.gradle.caching.internal.BuildCacheConfigurationInternal;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.execution.TaskGraphExecuter;
 import org.gradle.initialization.ClassLoaderScopeRegistry;
@@ -44,23 +49,28 @@ import org.gradle.internal.service.scopes.ServiceRegistryFactory;
 import org.gradle.listener.ActionBroadcast;
 import org.gradle.listener.ClosureBackedMethodInvocationDispatch;
 import org.gradle.util.GradleVersion;
+import org.gradle.util.Path;
 
 import javax.inject.Inject;
 import java.io.File;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.NoSuchElementException;
 
 public class DefaultGradle extends AbstractPluginAware implements GradleInternal {
     private ProjectInternal rootProject;
     private ProjectInternal defaultProject;
-    private final Gradle parent;
+    private final GradleInternal parent;
     private final StartParameter startParameter;
     private final ServiceRegistry services;
     private final ListenerBroadcast<BuildListener> buildListenerBroadcast;
     private final ListenerBroadcast<ProjectEvaluationListener> projectEvaluationListenerBroadcast;
+    private final Collection<IncludedBuild> includedBuilds = Lists.newArrayList();
     private ActionBroadcast<Project> rootProjectActions = new ActionBroadcast<Project>();
-
+    private Path identityPath;
     private final ClassLoaderScope classLoaderScope;
 
-    public DefaultGradle(Gradle parent, StartParameter startParameter, ServiceRegistryFactory parentRegistry) {
+    public DefaultGradle(GradleInternal parent, StartParameter startParameter, ServiceRegistryFactory parentRegistry) {
         this.parent = parent;
         this.startParameter = startParameter;
         this.services = parentRegistry.createFor(this);
@@ -81,7 +91,42 @@ public class DefaultGradle extends AbstractPluginAware implements GradleInternal
         return rootProject == null ? "build" : ("build '" + rootProject.getName() + "'");
     }
 
-    public Gradle getParent() {
+    @Override
+    public Path getIdentityPath() {
+        Path path = findIdentityPath();
+        if (path == null) {
+            // Not known yet
+            throw new IllegalStateException("Root project has not been attached.");
+        }
+        return path;
+    }
+
+    @Nullable
+    @Override
+    public Path findIdentityPath() {
+        if (identityPath == null) {
+            if (parent == null) {
+                identityPath = Path.ROOT;
+            } else {
+                if (rootProject == null) {
+                    // Not known yet
+                    return null;
+                }
+                identityPath = parent.getIdentityPath().child(rootProject.getName());
+            }
+        }
+        return identityPath;
+    }
+
+    @Override
+    public void setIdentityPath(Path path) {
+        if (identityPath != null && !path.equals(identityPath)) {
+            throw new IllegalStateException("Identity path already set");
+        }
+        identityPath = path;
+    }
+
+    public GradleInternal getParent() {
         return parent;
     }
 
@@ -204,8 +249,33 @@ public class DefaultGradle extends AbstractPluginAware implements GradleInternal
         return buildListenerBroadcast.getSource();
     }
 
+    @Override
+    public void buildCache(Action<? super BuildCacheConfiguration> action) {
+        action.execute(getBuildCache());
+    }
+
     public Gradle getGradle() {
         return this;
+    }
+
+    @Override
+    public Collection<IncludedBuild> getIncludedBuilds() {
+        return Collections.unmodifiableCollection(includedBuilds);
+    }
+
+    @Override
+    public void setIncludedBuilds(Collection<IncludedBuild> includedBuilds) {
+        this.includedBuilds.addAll(includedBuilds);
+    }
+
+    @Override
+    public IncludedBuild includedBuild(final String name) {
+        for (IncludedBuild includedBuild : includedBuilds) {
+            if (includedBuild.getName().equals(name)) {
+                return includedBuild;
+            }
+        }
+        throw new NoSuchElementException("Included build '" + name + "' not found.");
     }
 
     public ServiceRegistry getServices() {
@@ -224,6 +294,11 @@ public class DefaultGradle extends AbstractPluginAware implements GradleInternal
 
     public ClassLoaderScope getClassLoaderScope() {
         return classLoaderScope;
+    }
+
+    @Inject
+    public BuildCacheConfigurationInternal getBuildCache() {
+        throw new UnsupportedOperationException();
     }
 
     @Inject

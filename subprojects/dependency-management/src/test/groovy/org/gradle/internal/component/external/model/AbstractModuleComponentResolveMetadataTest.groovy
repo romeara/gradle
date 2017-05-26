@@ -16,12 +16,16 @@
 
 package org.gradle.internal.component.external.model
 
+import com.google.common.collect.ImmutableListMultimap
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.ModuleExclusions
+import org.gradle.internal.component.external.descriptor.Configuration
 import org.gradle.internal.component.external.descriptor.DefaultExclude
 import org.gradle.internal.component.external.descriptor.ModuleDescriptorState
 import org.gradle.internal.component.external.descriptor.MutableModuleDescriptorState
 import org.gradle.internal.component.model.DefaultIvyArtifactName
 import org.gradle.internal.component.model.DependencyMetadata
+import org.gradle.internal.component.model.ModuleSource
 import spock.lang.Specification
 
 import static org.gradle.api.internal.artifacts.DefaultModuleVersionSelector.newSelector
@@ -30,57 +34,22 @@ abstract class AbstractModuleComponentResolveMetadataTest extends Specification 
 
     def id = DefaultModuleComponentIdentifier.newId("group", "module", "version")
     def moduleDescriptor = new MutableModuleDescriptorState(id, "status", false)
+    def configurations = []
+    def dependencies = []
 
-    abstract AbstractModuleComponentResolveMetadata createMetadata(ModuleComponentIdentifier id, ModuleDescriptorState moduleDescriptor);
+    abstract AbstractModuleComponentResolveMetadata createMetadata(ModuleComponentIdentifier id, ModuleDescriptorState moduleDescriptor, List<Configuration> configurations, List<DependencyMetadata> dependencies)
 
-    MutableModuleComponentResolveMetadata getMetadata() {
-        return createMetadata(id, moduleDescriptor)
+    ModuleComponentResolveMetadata getMetadata() {
+        return createMetadata(id, moduleDescriptor, configurations, dependencies)
     }
 
     def "has useful string representation"() {
         given:
-        configuration("config")
+        configuration("runtime")
 
         expect:
         metadata.toString() == 'group:module:version'
-        metadata.getConfiguration('config').toString() == 'group:module:version:config'
-    }
-
-    def "can replace identifiers"() {
-        def newId = DefaultModuleComponentIdentifier.newId("group", "module", "version")
-        def metadata = getMetadata()
-
-        given:
-        metadata.setComponentId(newId)
-
-        expect:
-        metadata.componentId.is(newId)
-        metadata.id.group == "group"
-        metadata.id.name == "module"
-        metadata.id.version == "version"
-    }
-
-    def "builds and caches the dependency meta-data from the module descriptor"() {
-        given:
-        dependency("org", "module", "1.2")
-        dependency("org", "another", "1.2")
-
-        when:
-        def deps = metadata.dependencies
-
-        then:
-        deps.size() == 2
-        deps[0].requested == newSelector("org", "module", "1.2")
-        deps[1].requested == newSelector("org", "another", "1.2")
-    }
-
-    def "builds and caches the configuration meta-data from the module descriptor"() {
-        when:
-        configuration("conf")
-
-        then:
-        metadata.getConfiguration("conf").transitive
-        metadata.getConfiguration("conf").visible
+        metadata.getConfiguration('runtime').toString() == 'group:module:version:runtime'
     }
 
     def "returns null for unknown configuration"() {
@@ -90,52 +59,66 @@ abstract class AbstractModuleComponentResolveMetadataTest extends Specification 
 
     def "builds and caches dependencies for a configuration"() {
         given:
-        configuration("super")
-        configuration("conf", ["super"])
-        dependency("org", "module", "1.1").addDependencyConfiguration("conf", "a")
-        dependency("org", "module", "1.2").addDependencyConfiguration("*", "b")
-        dependency("org", "module", "1.3").addDependencyConfiguration("super", "c")
-        dependency("org", "module", "1.4").addDependencyConfiguration("other", "d")
-        dependency("org", "module", "1.5").addDependencyConfiguration("%", "e")
+        configuration("compile")
+        configuration("runtime", ["compile"])
+        dependency("org", "module", "1.1", "runtime", "a")
+        dependency("org", "module", "1.2", "*", "b")
+        dependency("org", "module", "1.3", "compile", "c")
+        dependency("org", "module", "1.4", "other", "d")
+        dependency("org", "module", "1.5", "%", "e")
 
         when:
-        def dependencies = this.metadata.getConfiguration("conf").dependencies
+        def md = metadata
+        def runtime = md.getConfiguration("runtime")
+        def compile = md.getConfiguration("compile")
 
         then:
-        dependencies*.requested*.version == ["1.1", "1.2", "1.3", "1.5"]
+        runtime.dependencies*.requested*.version == ["1.1", "1.2", "1.3", "1.5"]
+        runtime.dependencies.is(runtime.dependencies)
 
-        when:
-        def metadata = getMetadata()
-        metadata.setDependencies([])
-
-        then:
-        metadata.getConfiguration("conf").dependencies == []
+        compile.dependencies*.requested*.version == ["1.2", "1.3", "1.5"]
+        compile.dependencies.is(compile.dependencies)
     }
 
     def "builds and caches artifacts for a configuration"() {
         given:
-        configuration("conf")
-        artifact("one", ["conf"])
-        artifact("two", ["conf"])
+        configuration("runtime")
+        artifact("one", ["runtime"])
+        artifact("two", ["runtime"])
 
         when:
-        def artifacts = metadata.getConfiguration("conf").artifacts
+        def runtime = metadata.getConfiguration("runtime")
 
         then:
-        artifacts*.name.name == ["one", "two"]
+        runtime.artifacts*.name.name == ["one", "two"]
+        runtime.artifacts.is(runtime.artifacts)
+    }
+
+    def "each configuration contains a single variant containing no attributes and the artifacts of the configuration"() {
+        given:
+        configuration("runtime")
+        artifact("one", ["runtime"])
+        artifact("two", ["runtime"])
+
+        when:
+        def runtime = metadata.getConfiguration("runtime")
+
+        then:
+        runtime.variants.size() == 1
+        runtime.variants.first().attributes.empty
+        runtime.variants.first().artifacts*.name.name == ["one", "two"]
     }
 
     def "artifacts include union of those inherited from other configurations"() {
-
         given:
-        configuration("super")
-        configuration("conf", ["super"])
-        artifact("one", ["conf"])
-        artifact("two", ["conf", "super"])
-        artifact("three", ["super"])
+        configuration("compile")
+        configuration("runtime", ["compile"])
+        artifact("one", ["runtime"])
+        artifact("two", ["runtime", "compile"])
+        artifact("three", ["compile"])
 
         when:
-        def artifacts = metadata.getConfiguration("conf").artifacts
+        def artifacts = metadata.getConfiguration("runtime").artifacts
 
         then:
         artifacts*.name.name == ["one", "two", "three"]
@@ -143,43 +126,46 @@ abstract class AbstractModuleComponentResolveMetadataTest extends Specification 
 
     def "builds and caches exclude rules for a configuration"() {
         given:
-        configuration("super")
-        configuration("conf", ["super"])
-        def rule1 = exclude("one", ["conf"])
-        def rule2 = exclude("two", ["super"])
+        configuration("compile")
+        configuration("runtime", ["compile"])
+        def rule1 = exclude("one", ["runtime"])
+        def rule2 = exclude("two", ["compile"])
         def rule3 = exclude("three", ["other"])
 
-        when:
-        def excludeRules = metadata.getConfiguration("conf").excludes
+        expect:
+        def config = metadata.getConfiguration("runtime")
 
-        then:
-        excludeRules as List == [rule1, rule2]
+        def exclusions = config.exclusions
+        exclusions == ModuleExclusions.excludeAny(rule1, rule2)
+        exclusions.is(config.exclusions)
     }
 
-    def "can replace the dependencies for the module version"() {
-        def dependency1 = Stub(DependencyMetadata)
-        def dependency2 = Stub(DependencyMetadata)
+    def "can make a copy with different source"() {
+        given:
+        configuration("compile")
+        def source = Stub(ModuleSource)
 
         when:
-        dependency("foo", "bar", "1.0")
         def metadata = getMetadata()
+        def copy = metadata.withSource(source)
 
         then:
-        metadata.dependencies*.requested*.toString() == ["foo:bar:1.0"]
-
-        when:
-        metadata.dependencies = [dependency1, dependency2]
-
-        then:
-        metadata.dependencies == [dependency1, dependency2]
+        copy.source == source
+        copy.configurationNames == metadata.configurationNames
+        copy.getConfiguration("compile").is(metadata.getConfiguration("compile"))
+        copy.dependencies.is(metadata.dependencies)
     }
 
     def configuration(String name, List<String> extendsFrom = []) {
-        moduleDescriptor.addConfiguration(name, true, true, extendsFrom)
+        configurations.add(new Configuration(name, true, true, extendsFrom))
     }
 
     def dependency(String org, String module, String version) {
-        moduleDescriptor.addDependency(newSelector(org, module, version))
+        dependencies.add(new IvyDependencyMetadata(newSelector(org, module, version), ImmutableListMultimap.of()))
+    }
+
+    def dependency(String org, String module, String version, String fromConf, String toConf) {
+        dependencies.add(new IvyDependencyMetadata(newSelector(org, module, version), ImmutableListMultimap.of(fromConf, toConf)))
     }
 
     def artifact(String name, List<String> confs = []) {

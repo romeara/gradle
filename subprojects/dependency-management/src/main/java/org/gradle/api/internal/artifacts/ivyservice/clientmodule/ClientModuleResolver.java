@@ -23,6 +23,7 @@ import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies.DependencyDescriptorFactory;
 import org.gradle.internal.component.external.model.ModuleComponentArtifactMetadata;
+import org.gradle.internal.component.external.model.ModuleComponentResolveMetadata;
 import org.gradle.internal.component.external.model.MutableModuleComponentResolveMetadata;
 import org.gradle.internal.component.model.ComponentOverrideMetadata;
 import org.gradle.internal.component.model.DependencyMetadata;
@@ -48,19 +49,19 @@ public class ClientModuleResolver implements ComponentMetaDataResolver {
         }
         ClientModule clientModule = componentOverrideMetadata.getClientModule();
         if (clientModule != null) {
-            MutableModuleComponentResolveMetadata clientModuleMetaData = ((MutableModuleComponentResolveMetadata)result.getMetaData()).copy();
+            MutableModuleComponentResolveMetadata clientModuleMetaData = ((ModuleComponentResolveMetadata)result.getMetaData()).asMutable();
             addClientModuleDependencies(clientModule, clientModuleMetaData);
 
             setClientModuleArtifact(clientModuleMetaData);
 
-            result.setMetaData(clientModuleMetaData);
+            result.setMetaData(clientModuleMetaData.asImmutable());
         }
     }
 
     private void addClientModuleDependencies(ClientModule clientModule, MutableModuleComponentResolveMetadata clientModuleMetaData) {
         List<DependencyMetadata> dependencies = Lists.newArrayList();
         for (ModuleDependency moduleDependency : clientModule.getDependencies()) {
-            DependencyMetadata dependencyMetadata = dependencyDescriptorFactory.createDependencyDescriptor(moduleDependency.getConfiguration(), moduleDependency);
+            DependencyMetadata dependencyMetadata = dependencyDescriptorFactory.createDependencyDescriptor(moduleDependency.getTargetConfiguration(), null, moduleDependency);
             dependencies.add(dependencyMetadata);
         }
         clientModuleMetaData.setDependencies(dependencies);

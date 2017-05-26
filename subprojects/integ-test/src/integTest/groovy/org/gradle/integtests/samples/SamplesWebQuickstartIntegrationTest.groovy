@@ -36,7 +36,7 @@ class SamplesWebQuickstartIntegrationTest extends AbstractIntegrationSpec {
         sample sample
 
         when:
-        run 'clean', 'build'
+        executer.withTasks('clean', 'build').expectDeprecationWarning().run()
 
         then:
         // Check contents of War
@@ -74,30 +74,34 @@ stopPort = ${stopPort}
 println "httpPort: \$httpPort"
 println "stopPort: \$stopPort"
 
-task runTest << {
-    URL url = new URL("http://localhost:\$httpPort/quickstart")
-    println url.text
+task runTest {
+    doLast {
+        URL url = new URL("http://localhost:\$httpPort/quickstart")
+        println url.text
+    }
 }
 
-task sayHearthyGoodbye << {
-    //this task should last for a few seconds
-    //to neatly expose issues with jetty killing the main process
-    println "About to say goodbye..."
-    Thread.sleep(2000)
-    println "Jetty will miss you!"
+task sayHearthyGoodbye {
+    doLast {
+        //this task should last for a few seconds
+        //to neatly expose issues with jetty killing the main process
+        println "About to say goodbye..."
+        Thread.sleep(2000)
+        println "Jetty will miss you!"
+    }
 }
 """
 
         //starting jetty
         sample sample
-        def runJetty = executer.withTasks(jettyStartTask, "sayHearthyGoodbye").withArgument("-i").start()
+        def runJetty = executer.withTasks(jettyStartTask, "sayHearthyGoodbye").withArgument("-i").expectDeprecationWarning().start()
 
         //jetty is started
         available("http://localhost:$httpPort/quickstart", "jetty")
 
         //running web test then stopping jetty
         sample sample
-        def jettyStop = executer.withTasks('runTest', 'jettyStop').withArgument("-i").run()
+        def jettyStop = executer.withTasks('runTest', 'jettyStop').withArgument("-i").expectDeprecationWarning().run()
 
         //test has completed
         assert jettyStop.output.contains('hello Gradle')

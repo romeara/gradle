@@ -1,3 +1,6 @@
+import org.gradle.build.ReproduciblePropertiesWriter
+import org.gradle.build.ClasspathManifest
+
 import java.util.jar.Attributes
 
 apply plugin: 'groovy'
@@ -33,25 +36,28 @@ testTasks.all { task ->
         systemProperties['org.gradle.test.maxParallelForks'] = maxParallelForks
         systemProperties['org.gradle.ci.agentCount'] = 2
         systemProperties['org.gradle.ci.agentNum'] = rootProject.agentNum
-        doFirst {
-            println "maxParallelForks for '$task.path' is $task.maxParallelForks"
-        }
     }
     if (javaVersion.java7) {
         // enable class unloading
         task.jvmArgs '-XX:+UseConcMarkSweepGC', '-XX:+CMSClassUnloadingEnabled'
     }
+    doFirst {
+        if (isCiServer) {
+            println "maxParallelForks for '$task.path' is $task.maxParallelForks"
+        }
+    }
 }
 
 jarTasks.all { jar ->
+    jar.version = baseVersion
     jar.manifest.mainAttributes(
         (Attributes.Name.IMPLEMENTATION_TITLE.toString()): 'Gradle',
-        (Attributes.Name.IMPLEMENTATION_VERSION.toString()): version,
+        (Attributes.Name.IMPLEMENTATION_VERSION.toString()): baseVersion
     )
 }
 
 // Configures the project to use the test fixtures from another project, which by default is core.
-// Note this is not used to provide test fixtures, see gradle/testFixtures.gradle for that
+// Note this is not used to create test fixtures in this project, see gradle/testFixtures.gradle for that
 ext.useTestFixtures = { params = [:] ->
     def projectPath = params.project ?: ":core"
     def sourceSet = params.sourceSet ?: "test"
@@ -71,43 +77,14 @@ if (file("src/testFixtures").exists()) {
 
 apply from: "$rootDir/gradle/integTest.gradle"
 
-class ClasspathManifest extends DefaultTask {
 
-    FileCollection input = project.configurations.runtime
-
-    List<String> optionalProjects = []
-
-    @OutputFile
-    File getManifestFile() {
-        return new File(project.generatedResourcesDir, "${project.archivesBaseName}-classpath.properties")
-    }
-
-    @Input
-    Properties getProperties() {
-        def properties = new Properties()
-        properties.runtime = input.fileCollection {
-            (it instanceof ExternalDependency) || (it instanceof FileCollectionDependency)
-        }.collect { it.name }.join(',')
-        properties.projects = input.allDependencies.withType(ProjectDependency).collect {
-            it.dependencyProject.archivesBaseName
-        }.join(',')
-        if (!optionalProjects.empty) {
-            properties.optional = optionalProjects.join(',')
-        }
-        return properties
-    }
-
-    @TaskAction
-    def generate() {
-        // Remove Properties timestamp for reproducible build
-        def sw = new StringWriter()
-        getProperties().store(sw, "")
-        def content = sw.toString().split(/\n/).findAll { !it.startsWith("#") }.join("\n")
-        manifestFile.setText(content, "utf-8")
-    }
+if (file("src/performanceTest").exists()) {
+    apply from: "$rootDir/gradle/performanceTest.gradle"
 }
 
-ext.ClasspathManifest = ClasspathManifest
+if (file("src/jmh").exists()) {
+    apply from: "$rootDir/gradle/jmh.gradle"
+}
 
 // This is here mostly for the TravisCI build.
 // It advertises as an ANSI capable terminal but isn't, so we run with -q there to make

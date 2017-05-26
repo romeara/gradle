@@ -16,6 +16,7 @@
 
 package org.gradle.external.javadoc;
 
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Console;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
@@ -60,7 +61,7 @@ public interface MinimalJavadocOptions {
 
     MinimalJavadocOptions doclet(String docletClass);
 
-    @InputFiles
+    @Classpath
     List<File> getDocletpath();
 
     void setDocletpath(List<File> docletpath);
@@ -83,7 +84,7 @@ public interface MinimalJavadocOptions {
 
     MinimalJavadocOptions classpath(File ... classpath);
 
-    @InputFiles
+    @Classpath
     List<File> getBootClasspath();
 
     void setBootClasspath(List<File> bootClasspath);

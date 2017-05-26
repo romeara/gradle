@@ -21,6 +21,7 @@ def buckets = [
 
     "2": [
         ":toolingApi",
+        ":compositeBuilds",
         ":resourcesS3",
         ":jetty",
         ":resources",
@@ -28,7 +29,9 @@ def buckets = [
         ":docs",
         ":distributions",
         ":soak",
-        ":smokeTest"
+        ":smokeTest",
+        ":buildCacheHttp",
+        ":workers"
     ],
 
     "3": [
@@ -75,7 +78,10 @@ def buckets = [
         ":languageGroovy",
         ":internalTesting",
         ":performance",
+        ":buildScanPerformance",
         ":internalIntegTesting",
+        ":internalPerformanceTesting",
+	":internalAndroidPerformanceTesting",
         ":processServices",
         ":installationBeacon",
     ],
@@ -90,7 +96,8 @@ def buckets = [
         ":messaging",
         ":logging",
         ":resourcesHttp",
-        ":openApi"
+        ":openApi",
+        ":versionInfo"
     ],
 
     "8": [

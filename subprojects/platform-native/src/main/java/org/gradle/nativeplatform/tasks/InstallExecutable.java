@@ -189,10 +189,12 @@ public class InstallExecutable extends DefaultTask {
         installToDir(new File(destination, "lib"));
 
         String runScriptText =
-              "\n#/bin/sh"
+              "#!/bin/sh"
             + "\nAPP_BASE_NAME=`dirname \"$0\"`"
-            + "\nexport DYLD_LIBRARY_PATH=\"$APP_BASE_NAME/lib\""
-            + "\nexport LD_LIBRARY_PATH=\"$APP_BASE_NAME/lib\""
+            + "\nDYLD_LIBRARY_PATH=\"$APP_BASE_NAME/lib\""
+            + "\nexport DYLD_LIBRARY_PATH"
+            + "\nLD_LIBRARY_PATH=\"$APP_BASE_NAME/lib\""
+            + "\nexport LD_LIBRARY_PATH"
             + "\nexec \"$APP_BASE_NAME/lib/" + executable.getName() + "\" \"$@\""
             + "\n";
         GFileUtils.writeFile(runScriptText, getRunScript());

@@ -17,48 +17,40 @@
 package org.gradle.internal.component.external.model;
 
 import org.gradle.api.Nullable;
-import org.gradle.api.artifacts.ModuleVersionIdentifier;
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
-import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
-import org.gradle.internal.component.external.descriptor.ModuleDescriptorState;
-import org.gradle.internal.component.model.IvyArtifactName;
+import org.gradle.internal.component.model.ModuleSource;
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Set;
 
 public class DefaultMavenModuleResolveMetadata extends AbstractModuleComponentResolveMetadata implements MavenModuleResolveMetadata {
-    private static final String POM_PACKAGING = "pom";
-    private static final Collection<String> JAR_PACKAGINGS = Arrays.asList("ejb", "bundle", "maven-plugin", "eclipse-plugin");
+    public static final String POM_PACKAGING = "pom";
+    public static final Collection<String> JAR_PACKAGINGS = Arrays.asList("jar", "ejb", "bundle", "maven-plugin", "eclipse-plugin");
     private final String packaging;
     private final boolean relocated;
-    private String snapshotTimestamp;
+    private final String snapshotTimestamp;
 
-    public DefaultMavenModuleResolveMetadata(ModuleComponentIdentifier componentIdentifier, Set<IvyArtifactName> artifacts) {
-        this(componentIdentifier, createModuleDescriptor(componentIdentifier, artifacts), "jar", false);
+    DefaultMavenModuleResolveMetadata(MutableMavenModuleResolveMetadata metadata) {
+        super(metadata);
+        packaging = metadata.getPackaging();
+        relocated = metadata.isRelocated();
+        snapshotTimestamp = metadata.getSnapshotTimestamp();
     }
 
-    public DefaultMavenModuleResolveMetadata(ModuleDescriptorState moduleDescriptor, String packaging, boolean relocated) {
-        this(moduleDescriptor.getComponentIdentifier(), moduleDescriptor, packaging, relocated);
-    }
-
-    public DefaultMavenModuleResolveMetadata(ModuleComponentIdentifier componentId, ModuleDescriptorState descriptor, String packaging, boolean relocated) {
-        this(componentId, DefaultModuleVersionIdentifier.newId(componentId), descriptor, packaging, relocated);
-    }
-
-    private DefaultMavenModuleResolveMetadata(ModuleComponentIdentifier componentId, ModuleVersionIdentifier id, ModuleDescriptorState moduleDescriptor, String packaging, boolean relocated) {
-        super(componentId, id, moduleDescriptor);
-        this.packaging = packaging;
-        this.relocated = relocated;
+    private DefaultMavenModuleResolveMetadata(DefaultMavenModuleResolveMetadata metadata, ModuleSource source) {
+        super(metadata, source);
+        packaging = metadata.getPackaging();
+        relocated = metadata.isRelocated();
+        snapshotTimestamp = metadata.getSnapshotTimestamp();
     }
 
     @Override
-    public DefaultMavenModuleResolveMetadata copy() {
-        // TODO:ADAM - need to make a copy of the descriptor (it's effectively immutable at this point so it's not a problem yet)
-        DefaultMavenModuleResolveMetadata copy = new DefaultMavenModuleResolveMetadata(getComponentId(), getId(), getDescriptor(), packaging, relocated);
-        copyTo(copy);
-        copy.snapshotTimestamp = snapshotTimestamp;
-        return copy;
+    public DefaultMavenModuleResolveMetadata withSource(ModuleSource source) {
+        return new DefaultMavenModuleResolveMetadata(this, source);
+    }
+
+    @Override
+    public MutableMavenModuleResolveMetadata asMutable() {
+        return new DefaultMutableMavenModuleResolveMetadata(this);
     }
 
     public String getPackaging() {
@@ -74,11 +66,7 @@ public class DefaultMavenModuleResolveMetadata extends AbstractModuleComponentRe
     }
 
     public boolean isKnownJarPackaging() {
-        return "jar".equals(packaging) || JAR_PACKAGINGS.contains(packaging);
-    }
-
-    public void setSnapshotTimestamp(@Nullable String snapshotTimestamp) {
-        this.snapshotTimestamp = snapshotTimestamp;
+        return JAR_PACKAGINGS.contains(packaging);
     }
 
     @Nullable

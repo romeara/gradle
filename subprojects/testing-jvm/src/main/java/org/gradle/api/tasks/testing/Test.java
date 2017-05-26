@@ -21,16 +21,13 @@ import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.api.Incubating;
 import org.gradle.api.JavaVersion;
-import org.gradle.api.file.EmptyFileVisitor;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileTreeElement;
-import org.gradle.api.file.FileVisitDetails;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.ConventionTask;
 import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.file.FileResolver;
-import org.gradle.api.internal.file.FileTreeElementComparator;
-import org.gradle.api.internal.file.FileTreeElementHasher;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache;
 import org.gradle.api.internal.tasks.options.Option;
 import org.gradle.api.internal.tasks.testing.DefaultTestTaskReports;
@@ -65,12 +62,16 @@ import org.gradle.api.logging.LogLevel;
 import org.gradle.api.reporting.DirectoryReport;
 import org.gradle.api.reporting.Reporting;
 import org.gradle.api.specs.Spec;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.ParallelizableTask;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.VerificationTask;
 import org.gradle.api.tasks.testing.logging.TestLogging;
@@ -87,7 +88,9 @@ import org.gradle.internal.logging.progress.ProgressLoggerFactory;
 import org.gradle.internal.logging.text.StyledTextOutputFactory;
 import org.gradle.internal.operations.BuildOperationProcessor;
 import org.gradle.internal.operations.BuildOperationWorkerRegistry;
+import org.gradle.internal.progress.BuildOperationExecutor;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.internal.remote.internal.inet.InetAddressFactory;
 import org.gradle.listener.ClosureBackedMethodInvocationDispatch;
 import org.gradle.process.JavaForkOptions;
 import org.gradle.process.ProcessForkOptions;
@@ -101,9 +104,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.concurrent.Callable;
 
 /**
  * Executes JUnit (3.8.x or 4.x) or TestNG tests. Test are always run in (one or more) separate JVMs.
@@ -151,6 +151,7 @@ import java.util.concurrent.Callable;
  * </pre>
 
  */
+@CacheableTask
 @ParallelizableTask
 public class Test extends ConventionTask implements JavaForkOptions, PatternFilterable, VerificationTask, Reporting<TestTaskReports> {
 
@@ -190,8 +191,11 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
         reports.getHtml().setEnabled(true);
 
         filter = instantiator.newInstance(DefaultTestFilter.class);
+    }
 
-        addCandidateClassFilesHashProperty();
+    @Inject
+    protected InetAddressFactory getInetAddressFactory() {
+        throw new UnsupportedOperationException();
     }
 
     @Inject
@@ -274,8 +278,7 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      * {@inheritDoc}
      */
     @Override
-    // TODO:LPTR This should be handled as a directory
-    @Input
+    @Internal
     public File getWorkingDir() {
         return forkOptions.getWorkingDir();
     }
@@ -298,10 +301,18 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
     }
 
     /**
+     * Returns the version of Java used to run the tests based on the executable specified by {@link #getExecutable()}.
+     */
+    @Input
+    public JavaVersion getJavaVersion() {
+        return getServices().get(JvmVersionDetector.class).getJavaVersion(getExecutable());
+    }
+
+    /**
      * {@inheritDoc}
      */
     @Override
-    @Input
+    @Internal
     public String getExecutable() {
         return forkOptions.getExecutable();
     }
@@ -517,7 +528,6 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      * {@inheritDoc}
      */
     @Override
-    // @Optional @Input
     @Internal
     public Map<String, Object> getEnvironment() {
         return forkOptions.getEnvironment();
@@ -600,10 +610,10 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
         TestResultProcessor resultProcessor = new StateTrackingTestResultProcessor(testListenerInternalBroadcaster.getSource());
 
         if (testExecuter == null) {
-            testExecuter = new DefaultTestExecuter(getProcessBuilderFactory(), getActorFactory(), getModuleRegistry(), getServices().get(BuildOperationWorkerRegistry.class));
+            testExecuter = new DefaultTestExecuter(getProcessBuilderFactory(), getActorFactory(), getModuleRegistry(), getServices().get(BuildOperationWorkerRegistry.class), getServices().get(BuildOperationExecutor.class));
         }
 
-        JavaVersion javaVersion = getServices().get(JvmVersionDetector.class).getJavaVersion(getExecutable());
+        JavaVersion javaVersion = getJavaVersion();
         if (!javaVersion.isJava6Compatible()) {
             throw new UnsupportedJavaRuntimeException("Support for test execution using Java 5 or earlier was removed in Gradle 3.0.");
         }
@@ -632,7 +642,7 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
                 TestOutputAssociation outputAssociation = junitXml.isOutputPerTestCase()
                         ? TestOutputAssociation.WITH_TESTCASE
                         : TestOutputAssociation.WITH_SUITE;
-                Binary2JUnitXmlReportGenerator binary2JUnitXmlReportGenerator = new Binary2JUnitXmlReportGenerator(junitXml.getDestination(), testResultsProvider, outputAssociation, getBuildOperationProcessor());
+                Binary2JUnitXmlReportGenerator binary2JUnitXmlReportGenerator = new Binary2JUnitXmlReportGenerator(junitXml.getDestination(), testResultsProvider, outputAssociation, getBuildOperationProcessor(), getInetAddressFactory().getHostname());
                 binary2JUnitXmlReportGenerator.generate();
             }
 
@@ -848,7 +858,6 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      * @return All test class directories to be used.
      */
     @Internal
-    // TODO:LPTR This should be an @InputDirectory but that breaks UserGuidePlaySamplesIntegrationTest
     public File getTestClassesDir() {
         return testClassesDir;
     }
@@ -1036,7 +1045,7 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
     /**
      * Returns the classpath to use to execute the tests.
      */
-    @InputFiles
+    @Classpath
     public FileCollection getClasspath() {
         return classpath;
     }
@@ -1063,7 +1072,7 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      *
      * @return The maximum number of test classes. Returns 0 when there is no maximum.
      */
-    @Input
+    @Internal
     public long getForkEvery() {
         return forkEvery;
     }
@@ -1085,7 +1094,7 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      *
      * @return The maximum number of forked test processes.
      */
-    @Input
+    @Internal
     public int getMaxParallelForks() {
         return getDebug() ? 1 : maxParallelForks;
     }
@@ -1107,35 +1116,10 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      *
      * @return The candidate class files.
      */
+    @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     public FileTree getCandidateClassFiles() {
         return getProject().fileTree(getTestClassesDir()).matching(patternSet);
-    }
-
-    private void addCandidateClassFilesHashProperty() {
-        // force tests to run when the set of candidate class files changes
-        getInputs().property("candidateClassFilesHash", new Callable<Integer>() {
-            Integer candidateClassFilesHash;
-
-            @Override
-            public Integer call() throws Exception {
-                if (candidateClassFilesHash == null) {
-                    candidateClassFilesHash = calculateCandidateClassFilesHash();
-                }
-                return candidateClassFilesHash;
-            }
-        });
-    }
-
-    private Integer calculateCandidateClassFilesHash() {
-        final SortedSet<FileTreeElement> sortedFiles = new TreeSet<FileTreeElement>(FileTreeElementComparator.INSTANCE);
-        getCandidateClassFiles().visit(new EmptyFileVisitor() {
-            @Override
-            public void visitFile(FileVisitDetails fileDetails) {
-                sortedFiles.add(fileDetails);
-            }
-        });
-        return FileTreeElementHasher.calculateHashForFilePaths(sortedFiles);
     }
 
     /**
@@ -1185,7 +1169,19 @@ public class Test extends ConventionTask implements JavaForkOptions, PatternFilt
      */
     @Override
     public TestTaskReports reports(Closure closure) {
-        reports.configure(closure);
+        return reports(new ClosureBackedAction<TestTaskReports>(closure));
+    }
+
+    /**
+     * Configures the reports that this task potentially produces.
+     *
+     *
+     * @param configureAction The configuration
+     * @return The reports that this task potentially produces
+     */
+    @Override
+    public TestTaskReports reports(Action<? super TestTaskReports> configureAction) {
+        configureAction.execute(reports);
         return reports;
     }
 

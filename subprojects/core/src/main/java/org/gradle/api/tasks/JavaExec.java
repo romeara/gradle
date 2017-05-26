@@ -306,7 +306,6 @@ public class JavaExec extends ConventionTask implements JavaExecSpec {
     /**
      * {@inheritDoc}
      */
-    @InputFiles
     public FileCollection getClasspath() {
         return javaExecHandleBuilder.getClasspath();
     }
@@ -368,7 +367,7 @@ public class JavaExec extends ConventionTask implements JavaExecSpec {
     /**
      * {@inheritDoc}
      */
-    @Optional @Input
+    @Internal
     public Map<String, Object> getEnvironment() {
         return javaExecHandleBuilder.getEnvironment();
     }

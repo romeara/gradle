@@ -15,25 +15,32 @@
  */
 package org.gradle.api.internal.artifacts.dependencies;
 
-import org.gradle.api.artifacts.*;
+import groovy.lang.Closure;
+import org.gradle.api.Action;
+import org.gradle.api.Nullable;
+import org.gradle.api.artifacts.Dependency;
+import org.gradle.api.artifacts.DependencyArtifact;
+import org.gradle.api.artifacts.ExcludeRule;
+import org.gradle.api.artifacts.ExcludeRuleContainer;
+import org.gradle.api.artifacts.ModuleDependency;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.artifacts.DefaultExcludeRuleContainer;
-import org.gradle.util.ConfigureUtil;
+import org.gradle.util.DeprecationLogger;
 import org.gradle.util.GUtil;
 
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import groovy.lang.Closure;
-
 public abstract class AbstractModuleDependency extends AbstractDependency implements ModuleDependency {
     private ExcludeRuleContainer excludeRuleContainer = new DefaultExcludeRuleContainer();
     private Set<DependencyArtifact> artifacts = new HashSet<DependencyArtifact>();
+    @Nullable
     private String configuration;
     private boolean transitive = true;
 
-    protected AbstractModuleDependency(String configuration) {
-        this.configuration = GUtil.elvis(configuration, Dependency.DEFAULT_CONFIGURATION);
+    protected AbstractModuleDependency(@Nullable String configuration) {
+        this.configuration = configuration;
     }
 
     public boolean isTransitive() {
@@ -46,6 +53,12 @@ public abstract class AbstractModuleDependency extends AbstractDependency implem
     }
 
     public String getConfiguration() {
+        DeprecationLogger.nagUserOfDeprecated("ModuleDependency.getConfiguration()", "Use ModuleDependency.getTargetConfiguration() instead");
+        return GUtil.elvis(configuration, Dependency.DEFAULT_CONFIGURATION);
+    }
+
+    @Override
+    public String getTargetConfiguration() {
         return configuration;
     }
 
@@ -76,7 +89,13 @@ public abstract class AbstractModuleDependency extends AbstractDependency implem
     }
 
     public DependencyArtifact artifact(Closure configureClosure) {
-        DependencyArtifact artifact = ConfigureUtil.configure(configureClosure, new DefaultDependencyArtifact());
+        return artifact(ClosureBackedAction.of(configureClosure));
+    }
+
+    @Override
+    public DependencyArtifact artifact(Action<? super DependencyArtifact> configureAction) {
+        DependencyArtifact artifact = new DefaultDependencyArtifact();
+        configureAction.execute(artifact);
         artifacts.add(artifact);
         return artifact;
     }
@@ -95,7 +114,8 @@ public abstract class AbstractModuleDependency extends AbstractDependency implem
         if (!getName().equals(dependencyRhs.getName())) {
             return false;
         }
-        if (!getConfiguration().equals(dependencyRhs.getConfiguration())) {
+        if (getTargetConfiguration() != null ? !getTargetConfiguration().equals(dependencyRhs.getTargetConfiguration())
+            : dependencyRhs.getTargetConfiguration()!=null) {
             return false;
         }
         if (getVersion() != null ? !getVersion().equals(dependencyRhs.getVersion())

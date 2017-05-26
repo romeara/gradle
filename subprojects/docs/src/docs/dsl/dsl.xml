@@ -142,6 +142,9 @@
                 <td>org.gradle.api.initialization.Settings</td>
             </tr>
             <tr>
+                <td>org.gradle.api.initialization.IncludedBuild</td>
+            </tr>
+            <tr>
                 <td>org.gradle.api.Script</td>
             </tr>
             <tr>
@@ -315,6 +318,9 @@
                 <td>org.gradle.api.reporting.components.ComponentReport</td>
             </tr>
             <tr>
+                <td>org.gradle.api.reporting.dependents.DependentComponentsReport</td>
+            </tr>
+            <tr>
                 <td>org.gradle.api.reporting.model.ModelReport</td>
             </tr>
         </table>
@@ -450,6 +456,9 @@
             </tr>
             <tr>
                 <td>org.gradle.api.tasks.wrapper.Wrapper</td>
+            </tr>
+            <tr>
+                <td>org.gradle.api.tasks.WriteProperties</td>
             </tr>
             <tr>
                 <td>org.gradle.api.tasks.bundling.Zip</td>
@@ -592,6 +601,15 @@
                 <td>org.gradle.nativeplatform.NativeLibrarySpec</td>
             </tr>
             <tr>
+                <td>org.gradle.nativeplatform.test.NativeTestSuiteSpec</td>
+            </tr>
+            <tr>
+                <td>org.gradle.nativeplatform.test.cunit.CUnitTestSuiteSpec</td>
+            </tr>
+            <tr>
+                <td>org.gradle.nativeplatform.test.googletest.GoogleTestTestSuiteSpec</td>
+            </tr>
+            <tr>
                 <td>org.gradle.nativeplatform.NativeBinarySpec</td>
             </tr>
             <tr>
@@ -605,6 +623,15 @@
             </tr>
             <tr>
                 <td>org.gradle.nativeplatform.StaticLibraryBinarySpec</td>
+            </tr>
+            <tr>
+                <td>org.gradle.nativeplatform.test.NativeTestSuiteBinarySpec</td>
+            </tr>
+            <tr>
+                <td>org.gradle.nativeplatform.test.cunit.CUnitTestSuiteBinarySpec</td>
+            </tr>
+            <tr>
+                <td>org.gradle.nativeplatform.test.googletest.GoogleTestTestSuiteBinarySpec</td>
             </tr>
             <tr>
                 <td>org.gradle.nativeplatform.platform.NativePlatform</td>
@@ -623,18 +650,6 @@
             </tr>
             <tr>
                 <td>org.gradle.nativeplatform.toolchain.VisualCpp</td>
-            </tr>
-            <tr>
-                <td>org.gradle.nativeplatform.test.NativeTestSuiteSpec</td>
-            </tr>
-            <tr>
-                <td>org.gradle.nativeplatform.test.NativeTestSuiteBinarySpec</td>
-            </tr>
-            <tr>
-                <td>org.gradle.nativeplatform.test.cunit.CUnitTestSuiteSpec</td>
-            </tr>
-            <tr>
-                <td>org.gradle.nativeplatform.test.googletest.GoogleTestTestSuiteSpec</td>
             </tr>
             <tr>
                 <td>org.gradle.language.assembler.AssemblerSourceSet</td>

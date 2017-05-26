@@ -18,15 +18,16 @@ package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier;
 import org.gradle.api.artifacts.component.ProjectComponentSelector;
+import org.gradle.api.internal.artifacts.component.ComponentIdentifierFactory;
 import org.gradle.api.internal.component.ArtifactType;
-import org.gradle.internal.component.local.model.DefaultProjectComponentIdentifier;
+import org.gradle.internal.component.external.model.MetadataSourcedComponentArtifacts;
 import org.gradle.internal.component.local.model.DefaultProjectComponentSelector;
-import org.gradle.internal.component.local.model.LocalComponentArtifactIdentifier;
+import org.gradle.internal.component.local.model.LocalComponentArtifactMetadata;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
 import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import org.gradle.internal.component.model.ComponentArtifacts;
 import org.gradle.internal.component.model.ComponentOverrideMetadata;
 import org.gradle.internal.component.model.ComponentResolveMetadata;
-import org.gradle.internal.component.model.ComponentUsage;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.component.model.ModuleSource;
 import org.gradle.internal.resolve.ModuleVersionResolveException;
@@ -35,75 +36,79 @@ import org.gradle.internal.resolve.resolver.ComponentMetaDataResolver;
 import org.gradle.internal.resolve.resolver.DependencyToComponentIdResolver;
 import org.gradle.internal.resolve.result.BuildableArtifactResolveResult;
 import org.gradle.internal.resolve.result.BuildableArtifactSetResolveResult;
+import org.gradle.internal.resolve.result.BuildableComponentArtifactsResolveResult;
 import org.gradle.internal.resolve.result.BuildableComponentIdResolveResult;
 import org.gradle.internal.resolve.result.BuildableComponentResolveResult;
 
 import java.io.File;
-import java.util.List;
-import java.util.Set;
 
 public class ProjectDependencyResolver implements ComponentMetaDataResolver, DependencyToComponentIdResolver, ArtifactResolver {
     private final LocalComponentRegistry localComponentRegistry;
-    private final List<ProjectArtifactBuilder> artifactBuilders;
+    private final ProjectArtifactBuilder artifactBuilder;
+    private final ComponentIdentifierFactory componentIdentifierFactory;
 
-    public ProjectDependencyResolver(LocalComponentRegistry localComponentRegistry, List<ProjectArtifactBuilder> artifactBuilders) {
+    public ProjectDependencyResolver(LocalComponentRegistry localComponentRegistry, ProjectArtifactBuilder artifactBuilder, ComponentIdentifierFactory componentIdentifierFactory) {
         this.localComponentRegistry = localComponentRegistry;
-        this.artifactBuilders = artifactBuilders;
+        this.artifactBuilder = artifactBuilder;
+        this.componentIdentifierFactory = componentIdentifierFactory;
     }
 
+    @Override
     public void resolve(DependencyMetadata dependency, BuildableComponentIdResolveResult result) {
         if (dependency.getSelector() instanceof ProjectComponentSelector) {
             ProjectComponentSelector selector = (ProjectComponentSelector) dependency.getSelector();
-            ProjectComponentIdentifier project = DefaultProjectComponentIdentifier.newId(selector.getProjectPath());
+            ProjectComponentIdentifier project = componentIdentifierFactory.createProjectComponentIdentifier(selector);
             LocalComponentMetadata componentMetaData = localComponentRegistry.getComponent(project);
             if (componentMetaData == null) {
-                result.failed(new ModuleVersionResolveException(selector, "project '" + project.getProjectPath() + "' not found."));
+                result.failed(new ModuleVersionResolveException(selector, project + " not found."));
             } else {
                 result.resolved(componentMetaData);
             }
         }
     }
 
+    @Override
     public void resolve(ComponentIdentifier identifier, ComponentOverrideMetadata componentOverrideMetadata, BuildableComponentResolveResult result) {
         if (identifier instanceof ProjectComponentIdentifier) {
-            LocalComponentMetadata componentMetaData = localComponentRegistry.getComponent((ProjectComponentIdentifier) identifier);
+            ProjectComponentIdentifier projectId = (ProjectComponentIdentifier) identifier;
+            LocalComponentMetadata componentMetaData = localComponentRegistry.getComponent(projectId);
             if (componentMetaData == null) {
-                String projectPath = ((ProjectComponentIdentifier) identifier).getProjectPath();
-                result.failed(new ModuleVersionResolveException(new DefaultProjectComponentSelector(projectPath), "project '" + projectPath + "' not found."));
+                result.failed(new ModuleVersionResolveException(DefaultProjectComponentSelector.newSelector(projectId), projectId + " not found."));
             } else {
                 result.resolved(componentMetaData);
             }
         }
     }
 
-    public void resolveModuleArtifacts(ComponentResolveMetadata component, ArtifactType artifactType, BuildableArtifactSetResolveResult result) {
+    @Override
+    public void resolveArtifactsWithType(ComponentResolveMetadata component, ArtifactType artifactType, BuildableArtifactSetResolveResult result) {
         if (isProjectModule(component.getComponentId())) {
             throw new UnsupportedOperationException("Resolving artifacts by type is not yet supported for project modules");
         }
     }
 
-    public void resolveModuleArtifacts(ComponentResolveMetadata component, ComponentUsage usage, BuildableArtifactSetResolveResult result) {
+    @Override
+    public void resolveArtifacts(ComponentResolveMetadata component, BuildableComponentArtifactsResolveResult result) {
         if (isProjectModule(component.getComponentId())) {
-            String configurationName = usage.getConfigurationName();
-            Set<ComponentArtifactMetadata> artifacts = component.getConfiguration(configurationName).getArtifacts();
+            ComponentArtifacts artifacts = new MetadataSourcedComponentArtifacts();
+            artifacts = new ProjectDependencyComponentArtifacts(artifactBuilder, artifacts);
             result.resolved(artifacts);
         }
     }
 
+    @Override
     public void resolveArtifact(ComponentArtifactMetadata artifact, ModuleSource moduleSource, BuildableArtifactResolveResult result) {
         if (isProjectModule(artifact.getComponentId())) {
+            LocalComponentArtifactMetadata projectArtifact = (LocalComponentArtifactMetadata) artifact;
 
             // Run any registered actions to build this artifact
-            for (ProjectArtifactBuilder artifactBuilder : artifactBuilders) {
-                artifactBuilder.build(artifact);
-            }
+            artifactBuilder.build(projectArtifact);
 
-            LocalComponentArtifactIdentifier id = (LocalComponentArtifactIdentifier) artifact.getId();
-            File localArtifactFile = id.getFile();
+            File localArtifactFile = projectArtifact.getFile();
             if (localArtifactFile != null) {
                 result.resolved(localArtifactFile);
             } else {
-                result.notFound(artifact.getId());
+                result.notFound(projectArtifact.getId());
             }
         }
     }

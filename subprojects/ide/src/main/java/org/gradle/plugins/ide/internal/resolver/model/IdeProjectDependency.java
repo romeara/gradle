@@ -29,25 +29,22 @@ public class IdeProjectDependency extends IdeDependency {
 
     public IdeProjectDependency(ProjectComponentIdentifier projectId) {
         this.projectId = projectId;
-        this.projectName = determineNameFromPath(projectId.getProjectPath());
+        this.projectName = determineProjectName(projectId);
     }
 
     public ProjectComponentIdentifier getProjectId() {
         return projectId;
     }
 
-    public String getProjectPath() {
-        return projectId.getProjectPath();
-    }
-
     public String getProjectName() {
         return projectName;
     }
 
-    private static String determineNameFromPath(String projectPath) {
-        // TODO:DAZ This is less than ideal (currently only used for composite build dependencies)
-        if (projectPath.endsWith("::")) {
-            return projectPath.substring(0, projectPath.length() - 2);
+    private static String determineProjectName(ProjectComponentIdentifier projectId) {
+        assert !projectId.getBuild().isCurrentBuild();
+        String projectPath = projectId.getProjectPath();
+        if (projectPath.equals(":")) {
+            return projectId.getBuild().getName();
         }
         int index = projectPath.lastIndexOf(':');
         return projectPath.substring(index + 1);

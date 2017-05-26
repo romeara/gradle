@@ -25,10 +25,12 @@ import org.gradle.internal.HasInternalProtocol;
 
 /**
  * Describes an output property of a task that contains zero or more files.
+ *
+ * @since 3.0
  */
 @Incubating
 @HasInternalProtocol
-public interface TaskOutputFilePropertyBuilder extends TaskPropertyBuilder, TaskOutputs {
+public interface TaskOutputFilePropertyBuilder extends TaskFilePropertyBuilder, TaskOutputs {
     /**
      * {@inheritDoc}
      */
@@ -46,6 +48,12 @@ public interface TaskOutputFilePropertyBuilder extends TaskPropertyBuilder, Task
      * specified for the property, but any value specified must meet the validation constraints for the property.
      */
     TaskOutputFilePropertyBuilder optional(boolean optional);
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    TaskOutputFilePropertyBuilder withPathSensitivity(PathSensitivity sensitivity);
 
     /**
      * {@inheritDoc}
@@ -90,7 +98,7 @@ public interface TaskOutputFilePropertyBuilder extends TaskPropertyBuilder, Task
      */
     @Deprecated
     @Override
-    TaskOutputs files(Object... paths);
+    TaskOutputFilePropertyBuilder files(Object... paths);
 
     /**
      * {@inheritDoc}

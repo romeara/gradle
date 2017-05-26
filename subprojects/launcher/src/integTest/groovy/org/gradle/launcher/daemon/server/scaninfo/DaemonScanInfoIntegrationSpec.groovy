@@ -21,6 +21,8 @@ import org.gradle.integtests.fixtures.executer.ExecutionResult
 import spock.lang.Unroll
 
 class DaemonScanInfoIntegrationSpec extends DaemonIntegrationSpec {
+    static final EXPIRATION_CHECK_FREQUENCY = 50
+    static final EXPIRATION_CHECK_WAIT = 500
 
     def "should capture basic data via the service registry"() {
         given:
@@ -74,29 +76,54 @@ class DaemonScanInfoIntegrationSpec extends DaemonIntegrationSpec {
         given:
         buildFile << """
            ${imports()}
-           ${registerTestExpirationStrategy(50)}
+           ${registerTestExpirationStrategy()}
            ${registerExpirationListener()}
-           ${delayTask(200)}
+           ${delayTask()}
         """
 
         when:
         def delayResult = executer.withArguments(continuous ? ['delay', '--continuous'] : ['delay']).run()
 
         then:
-        delayResult.assertOutputContains('onExpirationEvent fired with: expiring daemon with TestExpirationStrategy')
+        delayResult.assertOutputContains("onExpirationEvent fired with: expiring daemon with TestExpirationStrategy")
 
         where:
         continuous << [true, false]
+    }
 
+    def "daemon expiration listener is implicitly for the current build only"() {
+        given:
+        buildFile << """
+           ${imports()}
+           ${registerTestExpirationStrategy()}
+           ${registerExpirationListener()}
+           ${delayTask()}
+        """
+
+        when:
+        def delayResult = executer.withArguments('delay').run()
+
+        then:
+        delayResult.assertOutputContains('onExpirationEvent fired with: expiring daemon with TestExpirationStrategy')
+
+        when:
+        buildFile.text = """
+           ${imports()}
+           ${delayTask()}
+        """
+        delayResult = executer.withArguments('delay').run()
+
+        then:
+        !delayResult.output.contains('onExpirationEvent fired with: expiring daemon with TestExpirationStrategy')
     }
 
     def "a daemon expiration listener receives expiration reasons when daemons run in the foreground"() {
         given:
         buildFile << """
            ${imports()}
-           ${registerTestExpirationStrategy(50)}
+           ${registerTestExpirationStrategy()}
            ${registerExpirationListener()}
-           ${delayTask(200)}
+           ${delayTask()}
         """
 
         when:
@@ -135,11 +162,11 @@ class DaemonScanInfoIntegrationSpec extends DaemonIntegrationSpec {
         """
     }
 
-    static String delayTask(int sleep) {
+    static String delayTask() {
         """
         task delay {
-            doFirst{
-             sleep(${sleep})
+            doFirst {
+             sleep(${EXPIRATION_CHECK_WAIT})
             }
         }
         """
@@ -158,7 +185,7 @@ class DaemonScanInfoIntegrationSpec extends DaemonIntegrationSpec {
         """
     }
 
-    static String registerTestExpirationStrategy(int frequency) {
+    static String registerTestExpirationStrategy() {
         """
         class TestExpirationStrategy implements DaemonExpirationStrategy {
             Project project
@@ -180,7 +207,7 @@ class DaemonScanInfoIntegrationSpec extends DaemonIntegrationSpec {
         }
 
         def daemon =  project.getServices().get(Daemon)
-        daemon.scheduleExpirationChecks(new AllDaemonExpirationStrategy([new TestExpirationStrategy(project)]), $frequency)
+        daemon.scheduleExpirationChecks(new AllDaemonExpirationStrategy([new TestExpirationStrategy(project)]), $EXPIRATION_CHECK_FREQUENCY)
         """
     }
 

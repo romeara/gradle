@@ -17,7 +17,10 @@
 package org.gradle.api.tasks.compile
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
+import spock.lang.Ignore
 import spock.lang.Issue
+
+import static org.gradle.util.JarUtils.jarWithContents
 
 class JavaCompileIntegrationTest extends AbstractIntegrationSpec {
 
@@ -29,7 +32,6 @@ class JavaCompileIntegrationTest extends AbstractIntegrationSpec {
                 sourceCompatibility = JavaVersion.current()
                 targetCompatibility = JavaVersion.current()
                 destinationDir = file("build/classes")
-                dependencyCacheDir = file("build/dependency-cache")
                 source "src/main/java"
             }
         """
@@ -87,5 +89,188 @@ class JavaCompileIntegrationTest extends AbstractIntegrationSpec {
         then:
         file("b/build/classes/main/Bar.class").exists()
         file("b/build/classes/main/Foo.class").exists()
+    }
+
+    @Issue("https://issues.gradle.org/browse/GRADLE-3508")
+    def "detects change in classpath order"() {
+        file("lib1.jar") << jarWithContents("data.txt": "data1")
+        file("lib2.jar") << jarWithContents("data.txt": "data2")
+        file("src/main/java/Foo.java") << "public class Foo {}"
+
+        buildFile << buildScriptWithClasspath("lib1.jar", "lib2.jar")
+
+        when:
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+
+        when:
+        run "compile"
+        then:
+        skippedTasks.contains ":compile"
+
+        // Need to wait for build script cache to be able to recognize change
+        sleep(1000L)
+
+        buildFile.delete()
+        buildFile << buildScriptWithClasspath("lib2.jar", "lib1.jar")
+
+        when:
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+    }
+
+    def "stays up-to-date after file renamed on classpath"() {
+        file("lib1.jar") << jarWithContents("data.txt": "data1")
+        file("lib2.jar") << jarWithContents("data.txt": "data2")
+        file("src/main/java/Foo.java") << "public class Foo {}"
+
+        buildFile << buildScriptWithClasspath("lib1.jar", "lib2.jar")
+
+        when:
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+
+        when:
+        run "compile"
+        then:
+        skippedTasks.contains ":compile"
+
+        when:
+        file("lib1.jar").renameTo(file("lib1-renamed.jar"))
+        buildFile.text = buildScriptWithClasspath("lib1-renamed.jar", "lib2.jar")
+
+        run "compile"
+        then:
+        skippedTasks.contains ":compile"
+    }
+
+    def "detects change in contents of directory on classpath"() {
+        file("resources", "data").createDir()
+        file("resources/data/input.txt") << "data"
+        file("src/main/java/Foo.java") << "public class Foo {}"
+
+        buildFile << buildScriptWithClasspath("resources")
+
+        when:
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+
+        when:
+        run "compile"
+        then:
+        skippedTasks.contains ":compile"
+
+        when:
+        file("resources/data/input.txt") << "data modified"
+
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+    }
+
+    def "detects relocated resource included via directory on classpath"() {
+        file("resources", "data").createDir()
+        file("resources/data/input.txt") << "data"
+        file("src/main/java/Foo.java") << "public class Foo {}"
+
+        buildFile << buildScriptWithClasspath("resources")
+
+        when:
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+
+        when:
+        run "compile"
+        then:
+        skippedTasks.contains ":compile"
+
+        when:
+        file("resources/data").renameTo(file("resources/data-modified"))
+
+        run "compile"
+        then:
+        nonSkippedTasks.contains ":compile"
+    }
+
+    def buildScriptWithClasspath(String... dependencies) {
+        """
+            task compile(type: JavaCompile) {
+                sourceCompatibility = JavaVersion.current()
+                targetCompatibility = JavaVersion.current()
+                destinationDir = file("build/classes")
+                source "src/main/java"
+                classpath = files('${dependencies.join("', '")}')
+            }
+        """
+    }
+
+    @Ignore
+    def "can compile after package case-rename"() {
+        buildFile << """
+            apply plugin: "java"
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                testCompile "junit:junit:4.12"
+            }
+        """
+
+        file("src/main/java/com/example/Foo.java") << """
+            package com.example;
+
+            public class Foo {}
+        """
+        file("src/test/java/com/example/FooTest.java") << """
+            package com.example;
+
+            import org.junit.Test;
+
+            public class FooTest {
+                @Test
+                public void test() {
+                    new com.example.Foo();
+                }
+            }
+        """
+
+        when:
+        succeeds "test"
+        then:
+        nonSkippedTasks.contains ":test"
+        file("build/classes/main/com/example/Foo.class").file
+
+        when:
+        // Move source file to case-renamed package
+        file("src/main/java/com/example").deleteDir()
+        file("src/main/java/com/Example/Foo.java") << """
+            package com.Example;
+
+            public class Foo {}
+        """
+        file("src/test/java/com/example/FooTest.java").text = """
+            package com.example;
+
+            import org.junit.Test;
+
+            public class FooTest {
+                @Test
+                public void test() {
+                    new com.Example.Foo();
+                }
+            }
+        """
+
+        succeeds "test"
+        then:
+        nonSkippedTasks.contains ":test"
+        file("build/classes/main/com/Example/Foo.class").file
     }
 }

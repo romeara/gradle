@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 package org.gradle.api.plugins
+
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.executer.ExecutionResult
+import org.gradle.internal.jvm.Jvm
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.util.Requires
@@ -37,7 +39,7 @@ class ApplicationPluginIntegrationTest extends AbstractIntegrationSpec {
         unixStartScriptContent.contains('DEFAULT_JVM_OPTS=""')
         unixStartScriptContent.contains('APP_NAME="sample"')
         unixStartScriptContent.contains('CLASSPATH=\$APP_HOME/lib/sample.jar')
-        unixStartScriptContent.contains('exec "\$JAVACMD" "\${JVM_OPTS[@]}" -classpath "\$CLASSPATH" org.gradle.test.Main "\$@"')
+        unixStartScriptContent.contains('exec "\$JAVACMD" "\$@"')
         File windowsStartScript = assertGeneratedWindowsStartScript()
         String windowsStartScriptContentText = windowsStartScript.text
         windowsStartScriptContentText.contains('@rem  sample startup script for Windows')
@@ -63,7 +65,7 @@ applicationDefaultJvmArgs = ["-Dgreeting.language=en", "-DappId=\${project.name 
         unixStartScriptContent.contains('APP_NAME="myApp"')
         unixStartScriptContent.contains('DEFAULT_JVM_OPTS=\'"-Dgreeting.language=en" "-DappId=sample"\'')
         unixStartScriptContent.contains('CLASSPATH=\$APP_HOME/lib/sample.jar')
-        unixStartScriptContent.contains('exec "\$JAVACMD" "\${JVM_OPTS[@]}" -classpath "\$CLASSPATH" org.gradle.test.Main "\$@"')
+        unixStartScriptContent.contains('exec "\$JAVACMD" "\$@"')
         File windowsStartScript = assertGeneratedWindowsStartScript('myApp.bat')
         String windowsStartScriptContentText = windowsStartScript.text
         windowsStartScriptContentText.contains('@rem  myApp startup script for Windows')
@@ -134,11 +136,51 @@ class CustomWindowsStartScriptGenerator implements ScriptGenerator {
         file('build/install/sample').exists()
 
         when:
-
         ExecutionResult result = runViaUnixStartScript()
 
         then:
         result.output.contains('Hello World!')
+    }
+
+    @Requires(TestPrecondition.UNIX_DERIVATIVE)
+    def "can execute generated Unix start script using JAVA_HOME with spaces"() {
+        given:
+        def testJavaHome = file("build/java home with spaces")
+        testJavaHome.createLink(Jvm.current().javaHome)
+
+        when:
+        succeeds('installDist')
+
+        then:
+        file('build/install/sample').exists()
+
+        when:
+        ExecutionResult result = runViaUnixStartScriptWithJavaHome(testJavaHome.absolutePath)
+
+        then:
+        result.output.contains('Hello World!')
+
+        cleanup:
+        testJavaHome.usingNativeTools().deleteDir() //remove symlink
+    }
+
+    @Requires(TestPrecondition.UNIX_DERIVATIVE)
+    public void "java PID equals script PID"() {
+        given:
+        succeeds('installDist')
+        def binFile = file('build/install/sample/bin/sample')
+        binFile.text = """echo Script PID: \$\$
+
+$binFile.text
+"""
+
+        when:
+        ExecutionResult result = runViaUnixStartScript()
+        def pids = result.output.findAll(/PID: \d+/)
+
+        then:
+        assert pids.size() == 2
+        assert pids[0] == pids[1]
     }
 
     @Requires(TestPrecondition.WINDOWS)
@@ -162,6 +204,19 @@ class CustomWindowsStartScriptGenerator implements ScriptGenerator {
 task execStartScript(type: Exec) {
     workingDir '$startScriptDir.canonicalPath'
     commandLine './sample'
+}
+"""
+        return succeeds('execStartScript')
+    }
+
+    ExecutionResult runViaUnixStartScriptWithJavaHome(String javaHome) {
+        TestFile startScriptDir = file('build/install/sample/bin')
+
+        buildFile << """
+task execStartScript(type: Exec) {
+    workingDir '$startScriptDir.canonicalPath'
+    commandLine './sample'
+    environment JAVA_HOME: "$javaHome"
 }
 """
         return succeeds('execStartScript')
@@ -240,6 +295,7 @@ package org.gradle.test;
 public class Main {
     public static void main(String[] args) {
         System.out.println("App Home: " + System.getProperty("appHomeSystemProp"));
+        System.out.println("App PID: " + java.lang.management.ManagementFactory.getRuntimeMXBean().getName().split("@")[0]);
         System.out.println("Hello World!");
     }
 }

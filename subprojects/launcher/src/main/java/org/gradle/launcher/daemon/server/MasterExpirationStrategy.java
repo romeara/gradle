@@ -17,8 +17,7 @@
 package org.gradle.launcher.daemon.server;
 
 import com.google.common.collect.ImmutableList;
-import org.gradle.api.logging.Logger;
-import org.gradle.api.logging.Logging;
+import org.gradle.internal.event.ListenerManager;
 import org.gradle.launcher.daemon.configuration.DaemonServerConfiguration;
 import org.gradle.launcher.daemon.server.expiry.AllDaemonExpirationStrategy;
 import org.gradle.launcher.daemon.server.expiry.AnyDaemonExpirationStrategy;
@@ -30,36 +29,43 @@ import org.gradle.launcher.daemon.server.health.LowMemoryDaemonExpirationStrateg
 import java.util.concurrent.TimeUnit;
 
 public class MasterExpirationStrategy implements DaemonExpirationStrategy {
-
-    private static final Logger LOGGER = Logging.getLogger(MasterExpirationStrategy.class);
+    private static final int DUPLICATE_DAEMON_GRACE_PERIOD_MS = 10000;
 
     private final DaemonExpirationStrategy strategy;
 
-    public MasterExpirationStrategy(Daemon daemon, DaemonServerConfiguration params, HealthExpirationStrategy healthExpirationStrategy) {
+    public MasterExpirationStrategy(Daemon daemon, DaemonServerConfiguration params, HealthExpirationStrategy healthExpirationStrategy, ListenerManager listenerManager) {
         ImmutableList.Builder<DaemonExpirationStrategy> strategies = ImmutableList.<DaemonExpirationStrategy>builder();
 
+        // Expire under high JVM memory or GC pressure
         strategies.add(healthExpirationStrategy);
+
+        // Expire compatible, idle, not recently used Daemons after a short time
+        strategies.add(new AllDaemonExpirationStrategy(ImmutableList.of(
+            new CompatibleDaemonExpirationStrategy(daemon),
+            new DaemonIdleTimeoutExpirationStrategy(daemon, DUPLICATE_DAEMON_GRACE_PERIOD_MS, TimeUnit.MILLISECONDS),
+            new NotMostRecentlyUsedDaemonExpirationStrategy(daemon)
+        )));
+
+        // Expire after normal idle timeout
         strategies.add(new DaemonIdleTimeoutExpirationStrategy(daemon, params.getIdleTimeout(), TimeUnit.MILLISECONDS));
 
-        addLowMemoryDaemonExpirationStrategyWhenSupported(daemon, params.getIdleTimeout(), strategies);
+        // Expire recently unused Daemons when memory pressure is high
+        addLowMemoryDaemonExpirationStrategyWhenSupported(daemon, strategies, listenerManager);
 
+        // Expire when Daemon Registry becomes unreachable for some reason
         strategies.add(new DaemonRegistryUnavailableExpirationStrategy(daemon));
 
         this.strategy = new AnyDaemonExpirationStrategy(strategies.build());
     }
 
-    private void addLowMemoryDaemonExpirationStrategyWhenSupported(Daemon daemon, int idleTimeout, ImmutableList.Builder<DaemonExpirationStrategy> strategies) {
-        try {
-            final LowMemoryDaemonExpirationStrategy lowMemoryDaemonExpirationStrategy = LowMemoryDaemonExpirationStrategy.belowFreeBytes(1024 * 1024 * 1024);
-            // this is to check that the JVM supports calling MemoryInfo.getFreePhysicalMemory
-            lowMemoryDaemonExpirationStrategy.checkExpiration();
-            strategies.add(new AllDaemonExpirationStrategy(ImmutableList.of(
-                new DaemonIdleTimeoutExpirationStrategy(daemon, idleTimeout / 8, TimeUnit.MILLISECONDS),
-                lowMemoryDaemonExpirationStrategy
-            )));
-        } catch (UnsupportedOperationException e) {
-            LOGGER.info("This JVM does not support getting free system memory, so daemons will not check for it");
-        }
+    private void addLowMemoryDaemonExpirationStrategyWhenSupported(Daemon daemon, ImmutableList.Builder<DaemonExpirationStrategy> strategies, ListenerManager listenerManager) {
+        final LowMemoryDaemonExpirationStrategy lowMemoryDaemonExpirationStrategy = new LowMemoryDaemonExpirationStrategy(0.05);
+        listenerManager.addListener(lowMemoryDaemonExpirationStrategy);
+        strategies.add(new AllDaemonExpirationStrategy(ImmutableList.of(
+            new DaemonIdleTimeoutExpirationStrategy(daemon, DUPLICATE_DAEMON_GRACE_PERIOD_MS, TimeUnit.MILLISECONDS),
+            new NotMostRecentlyUsedDaemonExpirationStrategy(daemon),
+            lowMemoryDaemonExpirationStrategy
+        )));
     }
 
     @Override

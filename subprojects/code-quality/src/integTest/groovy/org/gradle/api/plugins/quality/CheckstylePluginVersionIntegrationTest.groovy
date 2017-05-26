@@ -128,6 +128,46 @@ class CheckstylePluginVersionIntegrationTest extends MultiVersionIntegrationSpec
         file("build/reports/checkstyle/main.html").assertContents(containsClass("org.gradle.class2"))
     }
 
+    def "can ignore maximum number of errors"() {
+        badCode()
+        buildFile << """
+            checkstyle {
+                maxErrors = 2
+            }
+        """
+
+        expect:
+        succeeds("check")
+        file("build/reports/checkstyle/main.xml").assertContents(containsClass("org.gradle.class1"))
+        file("build/reports/checkstyle/main.xml").assertContents(containsClass("org.gradle.class2"))
+
+        file("build/reports/checkstyle/main.html").assertContents(containsClass("org.gradle.class1"))
+        file("build/reports/checkstyle/main.html").assertContents(containsClass("org.gradle.class2"))
+    }
+
+    def "can fail on maximum number of warnings"() {
+        given:
+        writeConfigFileWithWarnings()
+        badCode()
+
+        when:
+        buildFile << """
+            checkstyle {
+                maxWarnings = 1
+            }
+        """
+
+        then:
+        fails("check")
+        failure.assertHasDescription("Execution failed for task ':checkstyleMain'.")
+        failure.assertThatCause(startsWith("Checkstyle rule violations were found. See the report at:"))
+        file("build/reports/checkstyle/main.xml").assertContents(containsClass("org.gradle.class1"))
+        file("build/reports/checkstyle/main.xml").assertContents(containsClass("org.gradle.class2"))
+
+        file("build/reports/checkstyle/main.html").assertContents(containsClass("org.gradle.class1"))
+        file("build/reports/checkstyle/main.html").assertContents(containsClass("org.gradle.class2"))
+    }
+
     @IgnoreIf({GradleContextualExecuter.parallel})
     def "is incremental"() {
         given:
@@ -183,7 +223,6 @@ class CheckstylePluginVersionIntegrationTest extends MultiVersionIntegrationSpec
     }
 
     @Issue("GRADLE-3490")
-    @NotYetImplemented
     def "do not output XML report when only HTML report is enabled"() {
         given:
         goodCode()
@@ -202,6 +241,7 @@ class CheckstylePluginVersionIntegrationTest extends MultiVersionIntegrationSpec
         then:
         file("build/reports/checkstyle/main.html").exists()
         !file("build/reports/checkstyle/main.xml").exists()
+        !file("build/tmp/checkstyleMain/main.xml").exists()
     }
 
     private goodCode() {
@@ -270,6 +310,20 @@ checkstyle {
         "-//Puppy Crawl//DTD Check Configuration 1.2//EN"
         "http://www.puppycrawl.com/dtds/configuration_1_2.dtd">
 <module name="Checker">
+    <module name="TreeWalker">
+        <module name="TypeName"/>
+    </module>
+</module>
+        """
+    }
+
+    private void writeConfigFileWithWarnings() {
+        file("config/checkstyle/checkstyle.xml").text = """
+<!DOCTYPE module PUBLIC
+        "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+        "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+<module name="Checker">
+    <property name="severity" value="warning"/>
     <module name="TreeWalker">
         <module name="TypeName"/>
     </module>

@@ -60,7 +60,9 @@ import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.logging.LoggingManagerInternal;
 import org.gradle.logging.StandardOutputCapture;
 import org.gradle.util.ConfigureUtil;
+import org.gradle.util.DeprecationLogger;
 import org.gradle.util.GFileUtils;
+import org.gradle.util.Path;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -77,15 +79,13 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
     private static final Logger BUILD_LOGGER = Logging.getLogger(Task.class);
     private static final ThreadLocal<TaskInfo> NEXT_INSTANCE = new ThreadLocal<TaskInfo>();
 
-    // TODO Make this final once setProject() is removed
-    private ProjectInternal project;
+    private final ProjectInternal project;
 
-    // TODO Make this final once setName() is removed
-    private String name;
+    private final String name;
 
     private final List<ContextAwareTaskAction> actions = new ArrayList<ContextAwareTaskAction>();
 
-    private final String path;
+    private final Path path;
 
     private boolean enabled = true;
 
@@ -120,6 +120,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
 
     // toString() of AbstractTask is called a lot, so precompute.
     private final String toStringValue;
+    private final Path identityPath;
 
     private final TaskInputsInternal taskInputs;
     private final TaskOutputsInternal taskOutputs;
@@ -144,8 +145,9 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
         this.publicType = taskInfo.publicType;
         assert project != null;
         assert name != null;
-        path = project.absoluteProjectPath(name);
-        toStringValue = "task '" + path + "'";
+        path = project.getProjectPath().child(name);
+        identityPath = project.getIdentityPath().child(name);
+        toStringValue = "task '" + identityPath + "'";
         state = new TaskStateInternal(toString());
         TaskContainerInternal tasks = project.getTasks();
         dependencies = new DefaultTaskDependency(tasks);
@@ -160,7 +162,7 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
                 taskMutator.assertMutable("Task.getActions()", evt);
             }
         });
-        taskInputs = new DefaultTaskInputs(project.getFileResolver(), getName(), taskMutator);
+        taskInputs = new DefaultTaskInputs(project.getFileResolver(), this, taskMutator);
         taskOutputs = new DefaultTaskOutputs(project.getFileResolver(), this, taskMutator);
     }
 
@@ -316,7 +318,12 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
     }
 
     public String getPath() {
-        return path;
+        return path.getPath();
+    }
+
+    @Override
+    public Path getIdentityPath() {
+        return identityPath;
     }
 
     public Task deleteAllActions() {
@@ -503,6 +510,8 @@ public abstract class AbstractTask implements TaskInternal, DynamicObjectAware {
     }
 
     public Task leftShift(final Closure action) {
+        DeprecationLogger.nagUserWith("The Task.leftShift(Closure) method has been deprecated and is scheduled to be removed in Gradle 5.0. Please use Task.doLast(Action) instead.");
+
         hasCustomActions = true;
         if (action == null) {
             throw new InvalidUserDataException("Action must not be null!");

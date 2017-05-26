@@ -16,10 +16,14 @@
 
 package org.gradle.internal.component.model;
 
+import org.gradle.api.attributes.HasAttributes;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.ModuleExclusion;
+import org.gradle.api.internal.attributes.AttributeContainerInternal;
+
 import java.util.List;
 import java.util.Set;
 
-public interface ConfigurationMetadata {
+public interface ConfigurationMetadata extends HasAttributes {
     /**
      * The set of configurations that this configuration extends. Includes this configuration.
      */
@@ -27,17 +31,36 @@ public interface ConfigurationMetadata {
 
     String getName();
 
-    ComponentResolveMetadata getComponent();
+    @Override
+    AttributeContainerInternal getAttributes();
 
-    List<DependencyMetadata> getDependencies();
+    /**
+     * Returns the dependencies that apply to this configuration.
+     */
+    List<? extends DependencyMetadata> getDependencies();
 
-    Set<ComponentArtifactMetadata> getArtifacts();
+    /**
+     * Returns the artifacts associated with this configuration, if known.
+     */
+    Set<? extends ComponentArtifactMetadata> getArtifacts();
 
-    Set<Exclude> getExcludes();
+    /**
+     * Returns the variants of this configuration. Should include at least one value. Exactly one variant must be selected and the artifacts of that variant used.
+     */
+    Set<? extends VariantMetadata> getVariants();
+
+    /**
+     * Returns the exclusions to apply to outgoing dependencies from this configuration.
+     */
+    ModuleExclusion getExclusions();
 
     boolean isTransitive();
 
     boolean isVisible();
+
+    boolean isCanBeConsumed();
+
+    boolean isCanBeResolved();
 
     /**
      * Find the component artifact with the given IvyArtifactName, creating a new one if none matches.

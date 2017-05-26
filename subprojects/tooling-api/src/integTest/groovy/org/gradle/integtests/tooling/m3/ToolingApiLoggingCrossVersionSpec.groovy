@@ -16,6 +16,7 @@
 
 package org.gradle.integtests.tooling.m3
 
+import org.apache.commons.io.output.TeeOutputStream
 import org.gradle.integtests.tooling.fixture.TestOutputStream
 import org.gradle.integtests.tooling.fixture.TestResultHandler
 import org.gradle.integtests.tooling.fixture.ToolingApiLoggingSpecification
@@ -32,10 +33,12 @@ class ToolingApiLoggingCrossVersionSpec extends ToolingApiLoggingSpecification {
         def finishedMessage = "logging task: finished"
 
         file("build.gradle") << """
-task log << {
-    println "${waitingMessage}"
-    new URL("${server.uri}").text
-    println "${finishedMessage}"
+task log {
+    doLast {
+        println "${waitingMessage}"
+        new URL("${server.uri}").text
+        println "${finishedMessage}"
+    }
 }
 """
 
@@ -44,7 +47,7 @@ task log << {
         def output = new TestOutputStream()
         withConnection { ProjectConnection connection ->
             def build = connection.newBuild()
-            build.standardOutput = output
+            build.standardOutput =  new TeeOutputStream(output, System.out)
             build.forTasks("log")
             build.run(resultHandler)
             server.waitFor()

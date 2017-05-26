@@ -25,10 +25,10 @@ import spock.lang.Issue
 
 @RunWith(FluidDependenciesResolveRunner)
 class ProjectDependencyResolveIntegrationTest extends AbstractIntegrationSpec {
-    public void "project dependency includes artifacts and transitive dependencies of default configuration in target project"() {
+    def "project dependency includes artifacts and transitive dependencies of default configuration in target project"() {
         given:
-        mavenRepo.module("org.other", "externalA", 1.2).publish()
-        mavenRepo.module("org.other", "externalB", 2.1).publish()
+        mavenRepo.module("org.other", "externalA", "1.2").publish()
+        mavenRepo.module("org.other", "externalB", "2.1").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -61,50 +61,52 @@ project(":b") {
         compile project(':a')
     }
 
-    task check(dependsOn: configurations.compile) << {
-        assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar', 'externalB-2.1.jar']
-        def result = configurations.compile.incoming.resolutionResult
+    task check(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar', 'externalB-2.1.jar']
+            def result = configurations.compile.incoming.resolutionResult
 
-         // Check root component
-        def rootId = result.root.id
-        assert rootId instanceof ProjectComponentIdentifier
-        def rootPublishedAs = result.root.moduleVersion
-        assert rootPublishedAs.group == 'org.gradle'
-        assert rootPublishedAs.name == 'b'
-        assert rootPublishedAs.version == '1.0'
+             // Check root component
+            def rootId = result.root.id
+            assert rootId instanceof ProjectComponentIdentifier
+            def rootPublishedAs = result.root.moduleVersion
+            assert rootPublishedAs.group == 'org.gradle'
+            assert rootPublishedAs.name == 'b'
+            assert rootPublishedAs.version == '1.0'
 
-        // Check project components
-        def projectComponents = result.root.dependencies.selected.findAll { it.id instanceof ProjectComponentIdentifier }
-        assert projectComponents.size() == 1
-        def projectA = projectComponents[0]
-        assert projectA.id.projectPath == ':a'
-        assert projectA.moduleVersion.group != null
-        assert projectA.moduleVersion.name == 'a'
-        assert projectA.moduleVersion.version == 'unspecified'
+            // Check project components
+            def projectComponents = result.root.dependencies.selected.findAll { it.id instanceof ProjectComponentIdentifier }
+            assert projectComponents.size() == 1
+            def projectA = projectComponents[0]
+            assert projectA.id.projectPath == ':a'
+            assert projectA.moduleVersion.group != null
+            assert projectA.moduleVersion.name == 'a'
+            assert projectA.moduleVersion.version == 'unspecified'
 
-        // Check project dependencies
-        def projectDependencies = result.root.dependencies.requested.findAll { it instanceof ProjectComponentSelector }
-        assert projectDependencies.size() == 1
-        def projectDependency = projectDependencies[0]
-        assert projectDependency.projectPath == ':a'
+            // Check project dependencies
+            def projectDependencies = result.root.dependencies.requested.findAll { it instanceof ProjectComponentSelector }
+            assert projectDependencies.size() == 1
+            def projectDependency = projectDependencies[0]
+            assert projectDependency.projectPath == ':a'
 
-        // Check external module components
-        def externalComponents = result.allDependencies.selected.findAll { it.id instanceof ModuleComponentIdentifier }
-        assert externalComponents.size() == 2
-        def externalA = externalComponents[0]
-        assert externalA.id.group == 'org.other'
-        assert externalA.id.module == 'externalA'
-        assert externalA.id.version == '1.2'
-        assert externalA.moduleVersion.group == 'org.other'
-        assert externalA.moduleVersion.name == 'externalA'
-        assert externalA.moduleVersion.version == '1.2'
-        def externalB = externalComponents[1]
-        assert externalB.id.group == 'org.other'
-        assert externalB.id.module == 'externalB'
-        assert externalB.id.version == '2.1'
-        assert externalB.moduleVersion.group == 'org.other'
-        assert externalB.moduleVersion.name == 'externalB'
-        assert externalB.moduleVersion.version == '2.1'
+            // Check external module components
+            def externalComponents = result.allDependencies.selected.findAll { it.id instanceof ModuleComponentIdentifier }
+            assert externalComponents.size() == 2
+            def externalA = externalComponents[0]
+            assert externalA.id.group == 'org.other'
+            assert externalA.id.module == 'externalA'
+            assert externalA.id.version == '1.2'
+            assert externalA.moduleVersion.group == 'org.other'
+            assert externalA.moduleVersion.name == 'externalA'
+            assert externalA.moduleVersion.version == '1.2'
+            def externalB = externalComponents[1]
+            assert externalB.id.group == 'org.other'
+            assert externalB.id.module == 'externalB'
+            assert externalB.id.version == '2.1'
+            assert externalB.moduleVersion.group == 'org.other'
+            assert externalB.moduleVersion.name == 'externalB'
+            assert externalB.moduleVersion.version == '2.1'
+        }
     }
 }
 """
@@ -114,9 +116,9 @@ project(":b") {
         executedAndNotSkipped ":a:jar"
     }
 
-    public void "project dependency that specifies a target configuration includes artifacts and transitive dependencies of selected configuration"() {
+    def "project dependency that specifies a target configuration includes artifacts and transitive dependencies of selected configuration"() {
         given:
-        mavenRepo.module("org.other", "externalA", 1.2).publish()
+        mavenRepo.module("org.other", "externalA", "1.2").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -144,8 +146,10 @@ project(":b") {
     dependencies {
         compile project(path: ':a', configuration: 'runtime')
     }
-    task check(dependsOn: configurations.compile) << {
-        assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar']
+    task check(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar', 'externalA-1.2.jar']
+        }
     }
 }
 """
@@ -156,7 +160,7 @@ project(":b") {
     }
 
     @Issue("GRADLE-2899")
-    public void "multiple project configurations can refer to different configurations of target project"() {
+    def "multiple project configurations can refer to different configurations of target project"() {
         given:
         file('settings.gradle') << "include 'a', 'b'"
 
@@ -188,9 +192,11 @@ project(':b') {
         configB1 project(path:':a', configuration:'configA1')
         configB2 project(path:':a', configuration:'configA2')
     }
-    task check(dependsOn: [configurations.configB1, configurations.configB2]) << {
-        assert configurations.configB1.collect { it.name } == ['A1.jar']
-        assert configurations.configB2.collect { it.name } == ['A2.jar']
+    task check(dependsOn: [configurations.configB1, configurations.configB2]) {
+        doLast {
+            assert configurations.configB1.collect { it.name } == ['A1.jar']
+            assert configurations.configB2.collect { it.name } == ['A2.jar']
+        }
     }
 }
 """
@@ -200,7 +206,7 @@ project(':b') {
         executedAndNotSkipped ":a:A1jar", ":a:A2jar"
     }
 
-    public void "resolved project artifacts reflect project properties changed after task graph is resolved"() {
+    def "resolved project artifacts reflect project properties changed after task graph is resolved"() {
         given:
         file('settings.gradle') << "include 'a', 'b'"
 
@@ -227,9 +233,11 @@ project(':b') {
                 testCompile { extendsFrom compile }
             }
             dependencies { compile project(path: ':a', configuration: 'compile') }
-            task test(dependsOn: [configurations.compile, configurations.testCompile]) << {
-                assert configurations.compile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
-                assert configurations.testCompile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
+            task test(dependsOn: [configurations.compile, configurations.testCompile]) {
+                doLast {
+                    assert configurations.compile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
+                    assert configurations.testCompile.collect { it.name } == ['a-late.jar', 'b-transitive-late.jar']
+                }
             }
 '''
 
@@ -238,7 +246,7 @@ project(':b') {
         executedAndNotSkipped ":a:aJar", ":b:bJar"
     }
 
-    public void "resolved project artifact can be changed by configuration task"() {
+    def "resolved project artifact can be changed by configuration task"() {
         given:
         file('settings.gradle') << "include 'a'"
 
@@ -246,9 +254,11 @@ project(':b') {
         file('a/build.gradle') << '''
             apply plugin: 'base'
             configurations { compile }
-            task configureJar << {
-                tasks.aJar.extension = "txt"
-                tasks.aJar.classifier = "modified"
+            task configureJar {
+                doLast {
+                    tasks.aJar.extension = "txt"
+                    tasks.aJar.classifier = "modified"
+                }
             }
             task aJar(type: Jar) {
                 dependsOn configureJar
@@ -261,9 +271,11 @@ project(':b') {
                 testCompile { extendsFrom compile }
             }
             dependencies { compile project(path: ':a', configuration: 'compile') }
-            task test(dependsOn: [configurations.compile, configurations.testCompile]) << {
-                assert configurations.compile.collect { it.name } == ['a-modified.txt']
-                assert configurations.testCompile.collect { it.name } == ['a-modified.txt']
+            task test(dependsOn: [configurations.compile, configurations.testCompile]) {
+                doLast {
+                    assert configurations.compile.collect { it.name } == ['a-modified.txt']
+                    assert configurations.testCompile.collect { it.name } == ['a-modified.txt']
+                }
             }
 '''
 
@@ -272,9 +284,9 @@ project(':b') {
         executedAndNotSkipped ":a:configureJar", ":a:aJar"
     }
 
-    public void "project dependency that references an artifact includes the matching artifact only plus the transitive dependencies of referenced configuration"() {
+    def "project dependency that references an artifact includes the matching artifact only plus the transitive dependencies of referenced configuration"() {
         given:
-        mavenRepo.module("group", "externalA", 1.5).publish()
+        mavenRepo.module("group", "externalA", "1.5").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -309,11 +321,10 @@ project(":b") {
         expect:
         succeeds 'b:test'
 
-        // Demonstrates superfluous task dependencies for project artifacts
-        executedAndNotSkipped ":a:xJar", ":a:yJar" // Should be only the ":a:yJar"
+        executedAndNotSkipped ":a:yJar"
     }
 
-    public void "reports project dependency that refers to an unknown artifact"() {
+    def "reports project dependency that refers to an unknown artifact"() {
         given:
         file('settings.gradle') << """
 include 'a', 'b'
@@ -332,7 +343,7 @@ project(":b") {
     task test {
         inputs.files configurations.compile
         doFirst {
-            assert configurations.compile.files.collect { it.name } == ['a-b.jar', 'externalA-1.5.jar']
+            configurations.compile.files.collect { it.name }
         }
     }
 }
@@ -342,12 +353,13 @@ project(":b") {
         fails ':b:test'
 
         and:
-        failure.assertResolutionFailure(":b:compile").assertHasCause("Could not find b.jar (test:a:unspecified).")
+        failure.assertHasCause("Could not resolve all files for configuration ':b:compile'.")
+        failure.assertHasCause("Could not find b.jar (project :a).")
     }
 
-    public void "non-transitive project dependency includes only the artifacts of the target configuration"() {
+    def "non-transitive project dependency includes only the artifacts of the target configuration"() {
         given:
-        mavenRepo.module("group", "externalA", 1.5).publish()
+        mavenRepo.module("group", "externalA", "1.5").publish()
 
         and:
         file('settings.gradle') << "include 'a', 'b'"
@@ -368,8 +380,10 @@ project(':b') {
     dependencies {
         compile project(':a'), { transitive = false }
     }
-    task listJars(dependsOn: configurations.compile) << {
-        assert configurations.compile.collect { it.name } == ['a.jar']
+    task listJars(dependsOn: configurations.compile) {
+        doLast {
+            assert configurations.compile.collect { it.name } == ['a.jar']
+        }
     }
 }
 '''
@@ -379,7 +393,7 @@ project(':b') {
         executedAndNotSkipped ":a:jar"
     }
 
-    public void "can have cycle in project dependencies"() {
+    def "can have cycle in project dependencies"() {
         given:
         file('settings.gradle') << "include 'a', 'b', 'c'"
 
@@ -548,17 +562,19 @@ project('c') {
                     conf project(":api")
                 }
 
-                task check << {
-                    assert configurations.conf.state == Configuration.State.UNRESOLVED
-                    assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
+                task check {
+                    doLast {
+                        assert configurations.conf.state == Configuration.State.UNRESOLVED
+                        assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
 
-                    configurations.conf.resolve()
+                        configurations.conf.resolve()
 
-                    assert configurations.conf.state == Configuration.State.RESOLVED
-                    assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
+                        assert configurations.conf.state == Configuration.State.RESOLVED
+                        assert project(":api").configurations.conf.state == Configuration.State.UNRESOLVED
 
-                    // Attempt to change the configuration, to demonstrate that is has been observed
-                    project(":api").configurations.conf.dependencies.add(null)
+                        // Attempt to change the configuration, to demonstrate that is has been observed
+                        project(":api").configurations.conf.dependencies.add(null)
+                    }
                 }
             }
 """
@@ -571,7 +587,7 @@ project('c') {
     }
 
     @Issue(["GRADLE-3330", "GRADLE-3362"])
-    public void "project dependency can resolve multiple artifacts from target project that are differentiated by archiveName only"() {
+    def "project dependency can resolve multiple artifacts from target project that are differentiated by archiveName only"() {
         given:
         file('settings.gradle') << "include 'a', 'b'"
 
@@ -607,8 +623,10 @@ project(':b') {
         configB project(path:':a', configuration:'configOne')
         configB project(path:':a', configuration:'configTwo')
     }
-    task check(dependsOn: configurations.configB) << {
-        assert configurations.configB.collect { it.name } == ['A1.jar', 'A2.jar', 'A3.jar']
+    task check(dependsOn: configurations.configB) {
+        doLast {
+            assert configurations.configB.collect { it.name } == ['A1.jar', 'A2.jar', 'A3.jar']
+        }
     }
 }
 """
@@ -617,4 +635,5 @@ project(':b') {
         succeeds ":b:check"
         executedAndNotSkipped ":a:A1jar", ":a:A2jar", ":a:A3jar"
     }
+
 }

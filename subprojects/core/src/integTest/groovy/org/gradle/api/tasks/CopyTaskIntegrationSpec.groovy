@@ -16,6 +16,7 @@
 
 package org.gradle.api.tasks
 
+import groovy.transform.NotYetImplemented
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.TestResources
@@ -142,6 +143,7 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
                exclude '**/ignore/**'
                rename '(.*).a', '\$1.renamed'
                rename { it.startsWith('one.') ? "renamed_$it" : it }
+               rename { it.endsWith('two.b') ? null : it}
             }
         '''.stripIndent()
 
@@ -158,19 +160,21 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
             'one/sub/onesub.renamed',
             'one/sub/onesub.b',
             'two/two.renamed',
-            'two/two.b'
+            'two/two.b' //do not rename with 'rename { null }'
         )
     }
 
     def "copy action"() {
         given:
         buildScript '''
-            task copyIt << {
-               copy {
-                  from 'src'
-                  into 'dest'
-                  exclude '**/ignore/**'
-               }
+            task copyIt {
+                doLast {
+                    copy {
+                        from 'src'
+                        into 'dest'
+                        exclude '**/ignore/**'
+                    }
+                }
             }
         '''.stripIndent()
 
@@ -194,11 +198,13 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
     def "copy single files"() {
         given:
         buildScript '''
-            task copyIt << {
-               copy {
-                  from 'src/one/one.a', 'src/two/two.a'
-                  into 'dest/two'
-               }
+            task copyIt {
+                doLast {
+                    copy {
+                        from 'src/one/one.a', 'src/two/two.a'
+                        into 'dest/two'
+                    }
+                }
             }
         '''.stripIndent()
 
@@ -281,12 +287,14 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
     def "copy from file tree"() {
         given:
         buildScript '''
-        task cpy << {
-               copy {
+        task cpy {
+            doLast {
+                copy {
                     from fileTree(dir: 'src', excludes: ['**/ignore/**'], includes: ['*', '*/*'])
                     into 'dest\'
                 }
             }
+        }
         '''.stripIndent()
 
         when:
@@ -307,12 +315,14 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
     def "copy from file collection"() {
         given:
         buildScript '''
-            task copy << {
-               copy {
-                    from files('src')
-                    into 'dest\'
-                    exclude '**/ignore/**\'
-                    exclude '*/*/*/**\'
+            task copy {
+                doLast {
+                    copy {
+                        from files('src')
+                        into 'dest\'
+                        exclude '**/ignore/**\'
+                        exclude '*/*/*/**\'
+                    }
                 }
             }
         '''.stripIndent()
@@ -338,11 +348,13 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
         buildScript '''
             configurations { compile }
             dependencies { compile files('a.jar') }
-            task copy << {
-               copy {
-                    from files('src2') + fileTree('src') { exclude '**/ignore/**' } + configurations.compile
-                    into 'dest'
-                    include { fte -> fte.relativePath.segments.length < 3 && (fte.file.directory || fte.file.name.contains('a')) }
+            task copy {
+                doLast {
+                    copy {
+                        from files('src2') + fileTree('src') { exclude '**/ignore/**' } + configurations.compile
+                        into 'dest'
+                        include { fte -> fte.relativePath.segments.length < 3 && (fte.file.directory || fte.file.name.contains('a')) }
+                    }
                 }
             }
         '''.stripIndent()
@@ -822,10 +834,12 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
         def weirdFileName = "القيادة والسيطرة - الإدارة.lnk"
 
         buildFile << """
-            task copyFiles << {
-                copy {
-                    from 'res'
-                    into 'build/resources'
+            task copyFiles {
+                doLast {
+                    copy {
+                        from 'res'
+                        into 'build/resources'
+                    }
                 }
             }
         """
@@ -846,10 +860,12 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
         def weirdFileName = "القيادة والسيطرة - الإدارة.lnk"
 
         buildFile << """
-            task copyFiles << {
-                copy {
-                    from 'res'
-                    into 'build/resources'
+            task copyFiles {
+                doLast {
+                    copy {
+                        from 'res'
+                        into 'build/resources'
+                    }
                 }
             }
         """
@@ -1064,5 +1080,140 @@ class CopyTaskIntegrationSpec extends AbstractIntegrationSpec {
         skippedTasks.empty
     }
 
+    @NotYetImplemented
+    @Issue("https://issues.gradle.org/browse/GRADLE-1276")
+    def "changing expansion makes task out-of-date"() {
+        given:
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               expand(one: 1)
+            }
+        '''.stripIndent()
+        run 'copy'
 
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               expand(one: 2)
+            }
+        '''.stripIndent()
+        when:
+        run "copy"
+        then:
+        skippedTasks.empty
+    }
+
+    @NotYetImplemented
+    @Issue("https://issues.gradle.org/browse/GRADLE-1298")
+    def "changing filter makes task out-of-date"() {
+        given:
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               filter { it.contains '$one' }
+            }
+        '''.stripIndent()
+        run 'copy'
+
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               filter { it.contains '$two' }
+            }
+        '''.stripIndent()
+        when:
+        run "copy"
+        then:
+        skippedTasks.empty
+    }
+
+    @NotYetImplemented
+    @Issue("https://issues.gradle.org/browse/GRADLE-3549")
+    def "changing rename makes task out-of-date"() {
+        given:
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               rename '(.*).a', '\$1.renamed'
+            }
+        '''.stripIndent()
+        run 'copy'
+
+        buildScript '''
+            task (copy, type:Copy) {
+               from 'src'
+               into 'dest'
+               rename '(.*).a', '\$1.moved'
+            }
+        '''.stripIndent()
+        when:
+        run "copy"
+        then:
+        skippedTasks.empty
+    }
+
+    @Issue("https://issues.gradle.org/browse/GRADLE-3554")
+    def "copy with dependent task executes dependencies"() {
+        given:
+        buildScript '''
+            apply plugin: "war"
+
+            task copy(type: Copy) {
+                from 'src'
+                into 'dest'
+                with tasks.war
+            }
+        '''.stripIndent()
+
+        when:
+        run 'copy'
+        then:
+        executedTasks == [":compileJava", ":processResources", ":classes", ":copy"]
+    }
+
+    @Unroll
+    def "changing spec-level property #property makes task out-of-date"() {
+        given:
+        buildScript """
+            task (copy, type:Copy) {
+               from ('src') {
+                  $property = $oldValue
+               }
+               into 'dest'
+            }
+        """
+        buildFile.makeOlder()
+
+        run 'copy'
+
+        buildScript """
+            task (copy, type:Copy) {
+               from ('src') {
+                  $property = $newValue
+               }
+               into 'dest'
+            }
+        """
+
+        when:
+        run "copy", "--info"
+        then:
+        skippedTasks.empty
+        output.contains "Value of input property 'rootSpec\$1\$1.$property' has changed for task ':copy'"
+
+        where:
+        property             | oldValue                     | newValue
+        "caseSensitive"      | false                        | true
+        "includeEmptyDirs"   | false                        | true
+        "duplicatesStrategy" | "DuplicatesStrategy.EXCLUDE" | "DuplicatesStrategy.INCLUDE"
+        "dirMode"            | "0700"                       | "0755"
+        "fileMode"           | "0600"                       | "0644"
+        "filteringCharset"   | "'iso8859-1'"                | "'utf-8'"
+    }
 }

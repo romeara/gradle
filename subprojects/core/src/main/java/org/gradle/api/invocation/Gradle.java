@@ -19,13 +19,16 @@ import groovy.lang.Closure;
 import org.gradle.BuildListener;
 import org.gradle.StartParameter;
 import org.gradle.api.Action;
+import org.gradle.api.Incubating;
 import org.gradle.api.Project;
 import org.gradle.api.ProjectEvaluationListener;
 import org.gradle.api.execution.TaskExecutionGraph;
-import org.gradle.internal.HasInternalProtocol;
+import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.plugins.PluginAware;
+import org.gradle.internal.HasInternalProtocol;
 
 import java.io.File;
+import java.util.Collection;
 
 /**
  * Represents an invocation of Gradle.
@@ -59,7 +62,7 @@ public interface Gradle extends PluginAware {
      * If an existing daemon process is running that is deemed compatible (e.g. has the desired JVM characteristics)
      * then this daemon may be used instead of starting a new process and it may have been started from a different “gradle home”.
      * However, it is guaranteed to be the same version of Gradle. For more information on the Gradle Daemon, please consult
-     * <a href="http://docs.gradle.org/current/userguide/gradle_daemon.html">the user guide</a>.
+     * <a href="https://docs.gradle.org/current/userguide/gradle_daemon.html">the user guide</a>.
      *
      * @return The home directory. May return null.
      */
@@ -271,4 +274,16 @@ public interface Gradle extends PluginAware {
      * @return this. Never returns null.
      */
     Gradle getGradle();
+
+    /**
+     * Returns the included builds for this build.
+     */
+    @Incubating
+    Collection<IncludedBuild> getIncludedBuilds();
+
+    /**
+     * Returns the included build with the specified name for this build.
+     */
+    @Incubating
+    IncludedBuild includedBuild(String name);
 }

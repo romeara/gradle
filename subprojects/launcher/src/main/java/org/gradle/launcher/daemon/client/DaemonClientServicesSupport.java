@@ -16,7 +16,7 @@
 package org.gradle.launcher.daemon.client;
 
 import org.gradle.api.internal.DocumentationRegistry;
-import org.gradle.internal.TrueTimeProvider;
+import org.gradle.internal.time.TrueTimeProvider;
 import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.id.CompositeIdGenerator;
@@ -72,7 +72,8 @@ public abstract class DaemonClientServicesSupport extends DefaultServiceRegistry
                 matchingContextSpec,
                 buildStandardInput,
                 get(ExecutorFactory.class),
-                get(IdGenerator.class));
+                get(IdGenerator.class),
+                get(ProcessEnvironment.class));
     }
 
     DaemonContext createDaemonContext(ProcessEnvironment processEnvironment) {

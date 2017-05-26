@@ -16,31 +16,63 @@
 
 package org.gradle.internal.resource.transport.http
 
-import org.apache.http.HttpResponse
+import org.apache.http.client.methods.CloseableHttpResponse
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.client.methods.HttpRequestBase
+import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.ssl.SSLContexts
 import org.gradle.util.SetSystemProperties
 import org.junit.Rule
-import spock.lang.Specification
 
-class HttpClientHelperTest extends Specification {
+class HttpClientHelperTest extends AbstractHttpClientTest {
     @Rule SetSystemProperties sysProp = new SetSystemProperties()
 
     def "throws HttpRequestException if an IO error occurs during a request"() {
         def client = new HttpClientHelper(httpSettings) {
             @Override
-            protected HttpResponse executeGetOrHead(HttpRequestBase method) {
+            protected CloseableHttpResponse executeGetOrHead(HttpRequestBase method) {
                 throw new IOException("ouch")
             }
         }
 
         when:
-        client.performRequest(new HttpGet("http://gradle.org"))
+        client.performRequest(new HttpGet("http://gradle.org"), false)
 
         then:
         HttpRequestException e = thrown()
         e.cause.message == "ouch"
+    }
+
+    def "response is closed if an error occurs during a request"() {
+        def client = new HttpClientHelper(httpSettings)
+        CloseableHttpClient httpClient = Mock()
+        client.client = httpClient
+        MockedHttpResponse mockedHttpResponse = mockedHttpResponse()
+
+        when:
+        client.performRequest(new HttpGet("http://gradle.org"), false)
+
+        then:
+        interaction {
+            1 * httpClient.execute(_, _) >> mockedHttpResponse.response
+            assertIsClosedCorrectly(mockedHttpResponse)
+        }
+    }
+
+    def "request with revalidate adds Cache-Control header"() {
+        def client = new HttpClientHelper(httpSettings) {
+            @Override
+            protected CloseableHttpResponse executeGetOrHead(HttpRequestBase method) {
+                return null
+            }
+        }
+
+        when:
+        def request = new HttpGet("http://gradle.org")
+        client.performRequest(request, true)
+
+        then:
+        request.getHeaders("Cache-Control")[0].value == "max-age=0"
     }
 
     private HttpSettings getHttpSettings() {

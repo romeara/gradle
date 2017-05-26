@@ -21,8 +21,9 @@ import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileVisitDetails;
 import org.gradle.api.file.FileVisitor;
 import org.gradle.api.internal.file.collections.DirectoryFileTree;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.internal.ErroringAction;
@@ -44,11 +45,13 @@ import java.util.zip.ZipInputStream;
  *
  * It is assumed that the layout of the directories follow the JVM conventions. This allows us to effectively skip opening the class files to determine the real package name.
  */
+@CacheableTask
 public class PackageListGenerator extends DefaultTask {
     public static final List<String> DEFAULT_EXCLUDES = Arrays.asList(
         "org/gradle",
         "java",
-        "javax",
+        "javax/xml",
+        "javax/inject",
         "groovy",
         "groovyjarjarantlr",
         "net/rubygrapefruit",
@@ -69,7 +72,7 @@ public class PackageListGenerator extends DefaultTask {
         excludes = DEFAULT_EXCLUDES;
     }
 
-    @InputFiles
+    @Classpath
     public FileCollection getClasspath() {
         return classpath;
     }
@@ -98,7 +101,7 @@ public class PackageListGenerator extends DefaultTask {
 
     @TaskAction
     public void generate() {
-        IoActions.writeTextFile(outputFile, new ErroringAction<BufferedWriter>() {
+        IoActions.writeTextFile(getOutputFile(), new ErroringAction<BufferedWriter>() {
             @Override
             public void doExecute(final BufferedWriter bufferedWriter) throws Exception {
                 Trie packages = collectPackages();
@@ -115,7 +118,7 @@ public class PackageListGenerator extends DefaultTask {
 
     private Trie collectPackages() throws IOException {
         Trie.Builder builder = new Trie.Builder();
-        for (File file : classpath) {
+        for (File file : getClasspath()) {
             if (file.exists()) {
                 if (file.getName().endsWith(".jar")) {
                     processJarFile(file, builder);
@@ -174,13 +177,13 @@ public class PackageListGenerator extends DefaultTask {
     private void processClassFile(ZipEntry zipEntry, Trie.Builder builder) throws IOException {
         int endIndex = zipEntry.getName().lastIndexOf("/");
         if (endIndex > 0) {
-            String className = zipEntry.getName().substring(0, endIndex);
+            String packageName = zipEntry.getName().substring(0, endIndex);
             for (String exclude : getExcludes()) {
-                if (className.startsWith(exclude)) {
+                if ((packageName + "/").startsWith(exclude + "/")) {
                     return;
                 }
             }
-            builder.addWord(className);
+            builder.addWord(packageName);
         }
     }
 

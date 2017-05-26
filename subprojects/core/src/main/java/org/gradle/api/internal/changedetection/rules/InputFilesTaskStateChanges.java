@@ -16,19 +16,18 @@
 
 package org.gradle.api.internal.changedetection.rules;
 
-import com.google.common.hash.HashCode;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.changedetection.state.FileCollectionSnapshot;
-import org.gradle.api.internal.changedetection.state.FileCollectionSnapshotter;
+import org.gradle.api.internal.changedetection.state.FileCollectionSnapshotterRegistry;
 import org.gradle.api.internal.changedetection.state.TaskExecution;
 
-import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 
 public class InputFilesTaskStateChanges extends AbstractNamedFileSnapshotTaskStateChanges {
-    public InputFilesTaskStateChanges(TaskExecution previous, TaskExecution current, TaskInternal task, FileCollectionSnapshotter snapshotter) {
-        super(task.getName(), previous, current, snapshotter, true, "Input", task.getInputs().getFileProperties());
+    public InputFilesTaskStateChanges(TaskExecution previous, TaskExecution current, TaskInternal task, FileCollectionSnapshotterRegistry snapshotterRegistry) {
+        super(task.getName(), previous, current, snapshotterRegistry, "Input", task.getInputs().getFileProperties());
+        // Inputs are considered to be unchanged during task execution
+        current.setInputFilesSnapshot(getCurrent());
     }
 
     @Override
@@ -37,19 +36,7 @@ public class InputFilesTaskStateChanges extends AbstractNamedFileSnapshotTaskSta
     }
 
     @Override
-    protected HashCode getPreviousPreCheckHash() {
-        return previous.getInputFilesHash();
-    }
-
-    @Override
     public void saveCurrent() {
-        // Inputs are considered to be unchanged during task execution
-        current.setInputFilesHash(getPreCheckHash());
-        current.setInputFilesSnapshot(getCurrent());
-    }
-
-    @Override
-    protected Set<FileCollectionSnapshot.ChangeFilter> getFileChangeFilters() {
-        return Collections.emptySet();
+        // Inputs have already been saved in constructor
     }
 }

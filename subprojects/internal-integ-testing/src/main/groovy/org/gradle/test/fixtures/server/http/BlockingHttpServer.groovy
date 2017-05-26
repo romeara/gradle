@@ -17,6 +17,7 @@
 
 package org.gradle.test.fixtures.server.http
 
+import org.gradle.internal.time.TrueTimeProvider
 import org.junit.rules.ExternalResource
 import org.mortbay.jetty.Server
 import org.mortbay.jetty.handler.AbstractHandler
@@ -51,11 +52,31 @@ public class BlockingHttpServer extends ExternalResource {
         server.setHandler(handlers)
     }
 
+    /**
+     * Returns the URI for the given call.
+     */
+    URI uri(String call) {
+        return new URI("http", null, "localhost", getPort(), "/${call}", null, null)
+    }
+
+    /**
+     * Returns a Gradle build script fragment that invokes the given call.
+     */
+    String callFromBuildScript(String call) {
+        return "new URL('${uri(call)}').text"
+    }
+
+    /**
+     * Expects the given calls to be made concurrently. Blocks each call until they have all been received.
+     */
     void expectConcurrentExecution(String expectedCall, String... additionalExpectedCalls) {
         def handler = new CyclicBarrierRequestHandler((additionalExpectedCalls.toList() + expectedCall) as Set, {})
         collection.addHandler(handler)
     }
 
+    /**
+     * Expects the given call to be made.
+     */
     void expectSerialExecution(String expectedCall) {
         def handler = new CyclicBarrierRequestHandler(expectedCall, {})
         collection.addHandler(handler)
@@ -117,7 +138,7 @@ server state: ${server.dump()}
                 return
             }
 
-            Date expiry = new Date(System.currentTimeMillis() + 30000)
+            Date expiry = new Date(new TrueTimeProvider().getCurrentTime() + 30000)
             lock.lock()
             try {
                 if (shortCircuit) {

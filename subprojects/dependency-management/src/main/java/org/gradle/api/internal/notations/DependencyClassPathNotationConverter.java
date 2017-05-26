@@ -26,6 +26,7 @@ import org.gradle.api.internal.file.collections.FileCollectionAdapter;
 import org.gradle.api.internal.file.collections.SingletonFileSet;
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarFactory;
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarType;
+import org.gradle.internal.component.local.model.OpaqueComponentIdentifier;
 import org.gradle.internal.exceptions.DiagnosticsVisitor;
 import org.gradle.internal.installation.CurrentGradleInstallation;
 import org.gradle.internal.reflect.Instantiator;
@@ -34,6 +35,7 @@ import org.gradle.internal.typeconversion.NotationConverter;
 import org.gradle.internal.typeconversion.TypeConversionException;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -97,7 +99,7 @@ public class DependencyClassPathNotationConverter implements NotationConverter<D
             } else {
                 files = fileResolver.resolveFiles(classpath);
             }
-            dependency = instantiator.newInstance(DefaultSelfResolvingDependency.class, files);
+            dependency = instantiator.newInstance(DefaultSelfResolvingDependency.class, new OpaqueComponentIdentifier(notation.displayName), files);
             internCache.put(notation, dependency);
         }
         return dependency;
@@ -109,9 +111,24 @@ public class DependencyClassPathNotationConverter implements NotationConverter<D
         List<File> installationBeacon = classPathRegistry.getClassPath("GRADLE_INSTALLATION_BEACON").getAsFiles();
         apiClasspath.removeAll(groovyImpl);
         apiClasspath.removeAll(installationBeacon);
+        removeGradleScriptKotlin(apiClasspath);
 
         return (FileCollectionInternal) relocatedDepsJar(apiClasspath, "gradleApi()", RuntimeShadedJarType.API)
             .plus(fileResolver.resolveFiles(groovyImpl, installationBeacon));
+    }
+
+    /**
+     * Gradle script kotlin should not be part of the public Gradle API
+     * We remove this in a very hacky way for 3.0. Going forward, there
+     * will be a cleaner solution
+     */
+    private void removeGradleScriptKotlin(Collection<File> apiClasspath) {
+        for (File file : new ArrayList<File>(apiClasspath)) {
+            // TODO: replace by something cleaner
+            if (file.getName().contains("kotlin")) {
+                apiClasspath.remove(file);
+            }
+        }
     }
 
     private FileCollectionInternal gradleTestKitFileCollection(Collection<File> testKitClasspath) {

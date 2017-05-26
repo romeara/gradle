@@ -16,11 +16,11 @@
 
 package org.gradle.internal.component.model;
 
+import org.gradle.api.attributes.AttributesSchema;
 import org.gradle.api.artifacts.ModuleVersionSelector;
 import org.gradle.api.artifacts.component.ComponentSelector;
+import org.gradle.api.internal.artifacts.ivyservice.resolveengine.excludes.ModuleExclusion;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 
 public interface DependencyMetadata {
@@ -50,23 +50,28 @@ public interface DependencyMetadata {
     DependencyMetadata withTarget(ComponentSelector target);
 
     /**
-     * Returns a copy of this dependency with the changing flag set.
-     */
-    DependencyMetadata withChanging();
-
-    /**
      * Returns the component selector for this dependency.
      *
      * @return Component selector
      */
     ComponentSelector getSelector();
 
-    // The following methods all wrap an underlying method on DependencyDescriptor that we use, to help migrate away from using Ivy types.
-    String[] getModuleConfigurations();
+    /**
+     * Returns the exclusions to apply when traversing this dependency from the given configuration
+     */
+    // TODO:ADAM - fromConfiguration should be implicit in this metadata
+    ModuleExclusion getExclusions(ConfigurationMetadata fromConfiguration);
 
-    String[] getDependencyConfigurations(String moduleConfiguration, String requestedConfiguration);
+    /**
+     * Select the target configurations for this dependency from the given target component.
+     */
+    // TODO:ADAM - fromComponent and fromConfiguration should be implicit in this metadata
+    Set<ConfigurationMetadata> selectConfigurations(ComponentResolveMetadata fromComponent, ConfigurationMetadata fromConfiguration, ComponentResolveMetadata targetComponent, AttributesSchema attributesSchema);
 
-    List<Exclude> getExcludes(Collection<String> configurations);
+    /**
+     * Returns the set of source configurations that this dependency should be attached to.
+     */
+    Set<String> getModuleConfigurations();
 
     boolean isChanging();
 

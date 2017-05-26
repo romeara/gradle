@@ -117,7 +117,20 @@
                 <option>--gui</option>
             </term>
             <listitem>
-                <para>Launches the Gradle GUI. See <xref linkend="tutorial_gradle_gui"/>.
+                <para>
+                    Launches the Gradle GUI. See <xref linkend="tutorial_gradle_gui"/>.
+                </para>
+                <para>
+                    The Gradle GUI has been deprecated and will be removed in Gradle 4.0. Consider using an IDE with support for Gradle e.g. <ulink url="https://eclipse.org/">Eclipse</ulink>,
+                    <ulink url="https://www.jetbrains.com/idea/">IntelliJ</ulink> or <ulink url="https://netbeans.org/">NetBeans</ulink> instead.
+                </para>
+            </listitem>
+        </varlistentry>
+        <varlistentry>
+            <term><option>--include-build</option>
+            </term>
+            <listitem>
+                <para>Run the build as a composite, including the specified build. See <xref linkend="composite_builds"/>.
                 </para>
             </listitem>
         </varlistentry>
@@ -178,7 +191,8 @@
             <listitem>
                 <para>
                     Build projects in parallel. Gradle will attempt to determine the optimal number of executor threads to use.
-                    This option should only be used with decoupled projects (see <xref linkend="sec:decoupled_projects"/>).
+                    This option should only be used with decoupled projects (see <xref linkend="sec:decoupled_projects"/>). For limitations
+                    of this option please see <xref linkend="sec:parallel_execution"/>.
                 </para>
             </listitem>
         </varlistentry>

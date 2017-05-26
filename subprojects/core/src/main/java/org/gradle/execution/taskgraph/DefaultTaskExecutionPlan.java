@@ -257,6 +257,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
 
             if (taskNode.isIncludeInGraph() || executionPlan.containsKey(taskNode.getTask())) {
                 nodeQueue.remove(0);
+                visitingNodes.remove(taskNode, currentSegment);
                 maybeRemoveProcessedShouldRunAfterEdge(walkedShouldRunAfterEdges, taskNode);
                 continue;
             }
@@ -292,6 +293,7 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
             } else {
                 // Have visited this task's dependencies - add it to the end of the plan
                 nodeQueue.remove(0);
+                maybeRemoveProcessedShouldRunAfterEdge(walkedShouldRunAfterEdges, taskNode);
                 visitingNodes.remove(taskNode, currentSegment);
                 path.pop();
                 executionPlan.put(taskNode.getTask(), taskNode);
@@ -371,16 +373,17 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
         }
     }
 
+    /**
+     * Given a finalizer task, determine where in the current node queue that it should be inserted.
+     * The finalizer should be inserted after any of it's preceding tasks.
+     */
     private int finalizerTaskPosition(TaskInfo finalizer, final List<TaskInfoInVisitingSegment> nodeQueue) {
         if (nodeQueue.size() == 0) {
             return 0;
         }
 
-        ArrayList<TaskInfo> dependsOnTasks = new ArrayList<TaskInfo>();
-        dependsOnTasks.addAll(finalizer.getDependencySuccessors());
-        dependsOnTasks.addAll(finalizer.getMustSuccessors());
-        dependsOnTasks.addAll(finalizer.getShouldSuccessors());
-        List<Integer> dependsOnTaskIndexes = CollectionUtils.collect(dependsOnTasks, new Transformer<Integer, TaskInfo>() {
+        Set<TaskInfo> precedingTasks = getAllPrecedingTasks(finalizer);
+        Set<Integer> precedingTaskIndices = CollectionUtils.collect(precedingTasks, new Transformer<Integer, TaskInfo>() {
             public Integer transform(final TaskInfo dependsOnTask) {
                 return Iterables.indexOf(nodeQueue, new Predicate<TaskInfoInVisitingSegment>() {
                     public boolean apply(TaskInfoInVisitingSegment taskInfoInVisitingSegment) {
@@ -389,7 +392,28 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
                 });
             }
         });
-        return Collections.max(dependsOnTaskIndexes) + 1;
+        return Collections.max(precedingTaskIndices) + 1;
+    }
+
+    private Set<TaskInfo> getAllPrecedingTasks(TaskInfo finalizer) {
+        Set<TaskInfo> precedingTasks = new HashSet<TaskInfo>();
+        Deque<TaskInfo> candidateTasks = new ArrayDeque<TaskInfo>();
+
+        // Consider every task that must run before the finalizer
+        candidateTasks.addAll(finalizer.getDependencySuccessors());
+        candidateTasks.addAll(finalizer.getMustSuccessors());
+        candidateTasks.addAll(finalizer.getShouldSuccessors());
+
+        // For each candidate task, add it to the preceding tasks.
+        while (!candidateTasks.isEmpty()) {
+            TaskInfo precedingTask = candidateTasks.pop();
+            if (precedingTasks.add(precedingTask)) {
+                // Any task that the preceding task must run after is also a preceding task.
+                candidateTasks.addAll(precedingTask.getMustSuccessors());
+            }
+        }
+
+        return precedingTasks;
     }
 
     private void onOrderingCycle() {
@@ -651,18 +675,21 @@ public class DefaultTaskExecutionPlan implements TaskExecutionPlan {
         }
     }
 
-    private void enforceWithDependencies(TaskInfo node, Set<TaskInfo> enforcedTasks) {
-        if (enforcedTasks.contains(node)) {
-            return;
-        }
+    private void enforceWithDependencies(TaskInfo nodeInfo, Set<TaskInfo> enforcedTasks) {
+        Deque<TaskInfo> candidateNodes = new ArrayDeque<TaskInfo>();
+        candidateNodes.add(nodeInfo);
 
-        enforcedTasks.add(node);
+        while (!candidateNodes.isEmpty()) {
+            TaskInfo node = candidateNodes.pop();
+            if (!enforcedTasks.contains(node)) {
+                enforcedTasks.add(node);
 
-        for (TaskInfo dependencyNode : node.getDependencySuccessors()) {
-            enforceWithDependencies(dependencyNode, enforcedTasks);
-        }
-        if (node.isMustNotRun() || node.isRequired()) {
-            node.enforceRun();
+                candidateNodes.addAll(node.getDependencySuccessors());
+
+                if (node.isMustNotRun() || node.isRequired()) {
+                    node.enforceRun();
+                }
+            }
         }
     }
 

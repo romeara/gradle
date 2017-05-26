@@ -84,9 +84,11 @@ public class StartParameter implements LoggingConfiguration, Serializable {
     private boolean refreshDependencies;
     private boolean recompileScripts;
     private boolean parallelProjectExecution;
+    private boolean taskOutputCacheEnabled;
     private boolean configureOnDemand;
     private int maxWorkerCount;
     private boolean continuous;
+    private List<File> includedBuilds = new ArrayList<File>();
 
     /**
      * {@inheritDoc}
@@ -195,6 +197,7 @@ public class StartParameter implements LoggingConfiguration, Serializable {
         p.systemPropertiesArgs = new HashMap<String, String>(systemPropertiesArgs);
         p.gradleHomeDir = gradleHomeDir;
         p.initScripts = new ArrayList<File>(initScripts);
+        p.includedBuilds = new ArrayList<File>(includedBuilds);
         p.dryRun = dryRun;
         p.projectCacheDir = projectCacheDir;
         return p;
@@ -222,6 +225,7 @@ public class StartParameter implements LoggingConfiguration, Serializable {
         p.recompileScripts = recompileScripts;
         p.refreshDependencies = refreshDependencies;
         p.parallelProjectExecution = parallelProjectExecution;
+        p.taskOutputCacheEnabled = taskOutputCacheEnabled;
         p.configureOnDemand = configureOnDemand;
         p.maxWorkerCount = maxWorkerCount;
         p.systemPropertiesArgs = new HashMap<String, String>(systemPropertiesArgs);
@@ -646,9 +650,31 @@ public class StartParameter implements LoggingConfiguration, Serializable {
     }
 
     /**
+     * Returns true if task output caching is enabled.
+     */
+    @Incubating
+    public boolean isTaskOutputCacheEnabled() {
+        return taskOutputCacheEnabled;
+    }
+
+    /**
+     * Enables/disables task output caching.
+     */
+    @Incubating
+    public void setTaskOutputCacheEnabled(boolean taskOutputCacheEnabled) {
+        this.taskOutputCacheEnabled = taskOutputCacheEnabled;
+    }
+
+    /**
      * Returns the maximum number of concurrent workers used for underlying build operations.
      *
-     * Workers can be threads, processes or whatever Gradle considers a "worker".
+     * Workers can be threads, processes or whatever Gradle considers a "worker". Some examples:
+     *
+     * <ul>
+     *     <li>A thread running a task</li>
+     *     <li>A test process</li>
+     *     <li>A language compiler in a forked process</li>
+     * </ul>
      *
      * Defaults to the number of processors available to the Java virtual machine.
      *
@@ -706,6 +732,7 @@ public class StartParameter implements LoggingConfiguration, Serializable {
             + ", parallelProjectExecution=" + parallelProjectExecution
             + ", configureOnDemand=" + configureOnDemand
             + ", maxWorkerCount=" + maxWorkerCount
+            + ", taskOutputCacheEnabled=" + taskOutputCacheEnabled
             + '}';
     }
 
@@ -729,6 +756,21 @@ public class StartParameter implements LoggingConfiguration, Serializable {
     @Incubating
     public void setContinuous(boolean enabled) {
         this.continuous = enabled;
+    }
+
+    @Incubating
+    public void includeBuild(File includedBuild) {
+        includedBuilds.add(includedBuild);
+    }
+
+    @Incubating
+    public void setIncludedBuilds(List<File> includedBuilds) {
+        this.includedBuilds = includedBuilds;
+    }
+
+    @Incubating
+    public List<File> getIncludedBuilds() {
+        return Collections.unmodifiableList(includedBuilds);
     }
 
 }

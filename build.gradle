@@ -47,7 +47,7 @@ buildTypes {
 
     // Used by the first phase of the build pipeline, running only last version on multiversion - tests
     quickTest {
-        tasks "runtimeTests", "runtimeIntegTests", "performance:test"
+        tasks "runtimeTests", "runtimeIntegTests"
     }
 
     // Used for builds to run all tests, but not necessarily on all platforms
@@ -58,7 +58,7 @@ buildTypes {
 
     // Used for builds to test the code on certain platforms
     platformTest {
-        tasks "runtimeTests", "runtimeForkingIntegTests", "performance:test"
+        tasks "runtimeTests", "runtimeForkingIntegTests"
         projectProperties useIncomingDistributions: true, testAllVersions: true, testAllPlatforms: true
     }
 
@@ -74,15 +74,33 @@ buildTypes {
         projectProperties useIncomingDistributions: true
     }
 
-    // Run the performance tests
-    performanceTest {
+    performanceTests {
         tasks "performance:performanceTest"
         projectProperties useIncomingDistributions: true
     }
 
-    // Run the performance experiments
     performanceExperiments {
         tasks "performance:performanceExperiments"
+        projectProperties useIncomingDistributions: true
+    }
+
+    fullPerformanceTests {
+        tasks "performance:fullPerformanceTest"
+        projectProperties useIncomingDistributions: true
+    }
+
+    distributedPerformanceTests {
+        tasks "performance:distributedPerformanceTest"
+        projectProperties useIncomingDistributions: true
+    }
+
+    distributedPerformanceExperiments {
+        tasks "performance:distributedPerformanceExperiment"
+        projectProperties useIncomingDistributions: true
+    }
+
+    distributedFullPerformanceTests {
+        tasks "performance:distributedFullPerformanceTest"
         projectProperties useIncomingDistributions: true
     }
 
@@ -121,6 +139,7 @@ buildTypes {
 
 apply from: "gradle/testGroupings.gradle"
 apply from: 'gradle/buildSplits.gradle'
+apply from: 'gradle/buildScanUserData.gradle'
 ext {
     jvm = org.gradle.internal.jvm.Jvm.current()
     javaVersion = JavaVersion.current()
@@ -147,7 +166,7 @@ ext {
         }
     }
 
-    internalProjects = subprojects.findAll { it.name.startsWith("internal") || it.name in ["integTest", "distributions", "performance"] }
+    internalProjects = subprojects.findAll { it.name.startsWith("internal") || it.name in ["integTest", "distributions", "performance", "buildScanPerformance"] }
     groovyProjects = subprojects
     publicGroovyProjects = groovyProjects - internalProjects
     pluginProjects = [
@@ -157,7 +176,7 @@ ext {
         'platformJvm', 'languageJvm', 'languageJava', 'languageGroovy', 'languageScala',
         'platformNative', 'platformPlay', 'idePlay', 'languageNative', 'ideNative', 'testingBase',
         'testingNative', 'testingJvm', 'pluginDevelopment', 'pluginUse', 'resourcesHttp',
-        'resourcesSftp', 'resourcesS3', 'toolingApiBuilders'
+        'resourcesSftp', 'resourcesS3', 'toolingApiBuilders', 'compositeBuilds', 'buildCacheHttp'
     ].collect {
         project(it)
     }
@@ -168,6 +187,8 @@ ext {
         project(':wrapper'),
         project(':baseServices'),
         project(':baseServicesGroovy'),
+        project(':workers'),
+        project(':dependencyManagement'),
         project(':messaging'),
         project(':processServices'),
         project(':resources')
@@ -175,7 +196,6 @@ ext {
     removedProjects = ['sonar']
 }
 
-apply from: "gradle/buildReceipt.gradle"
 apply from: "gradle/incomingDistributions.gradle"
 apply from: "gradle/versioning.gradle"
 apply from: "gradle/dependencies.gradle"
@@ -248,40 +268,40 @@ configurations {
     }
 }
 
-def patchedExternalModulesDir = "$rootProject.buildDir/external/files"
-def patchedExternalModules = fileTree(patchedExternalModulesDir) {
-    builtBy 'patchExternalModules'
-}
+def patchedExternalModulesDir = new File(buildDir, "external/files")
+def patchedExternalModules = files({ -> fileTree(patchedExternalModulesDir).files.sort() })
+patchedExternalModules.builtBy 'patchExternalModules'
 
 dependencies {
-    externalModules 'org.gradle:gradle-script-kotlin:0.2.0'
+    externalModules 'org.gradle:gradle-script-kotlin:0.5.1'
     coreRuntime project(':launcher')
     runtime project(':wrapper')
     runtime project(":installationBeacon")
     runtime patchedExternalModules
     gradlePlugins pluginProjects
+    gradlePlugins project(':workers')
     gradlePlugins project(':dependencyManagement')
     gradlePlugins project(':testKit')
 }
 
-task patchExternalModules(type: Copy) {
-    description 'Patches the classpath manifests of external modules such as gradle-script-kotlin to match the Gradle runtime configuration.'
+import org.gradle.modules.PatchExternalModules
+
+task patchExternalModules(type: PatchExternalModules) {
     // Include any dependency jars that are not available in the core runtime
-    from configurations.externalModulesRuntime.minus(configurations.coreRuntime)
-    into patchedExternalModulesDir
-    doLast {
-        new ClasspathManifestPatcher(rootProject, configurations.externalModulesRuntime, configurations.externalModules)
-            .writePatchedFilesTo(destinationDir)
-        new ExcludeEntryPatcher(rootProject, configurations.externalModulesRuntime, "kotlin-compiler-embeddable")
-            .exclude("META-INF/services/java.nio.charset.spi.CharsetProvider")
-            .writePatchedFilesTo(destinationDir)
-    }
+    externalModulesRuntime = configurations.externalModulesRuntime
+    coreRuntime = configurations.coreRuntime
+    externalModules = configurations.externalModules
+    destination = patchedExternalModulesDir
+
+    dependsOn configurations.externalModules
 }
 
-task verifyIsProductionBuildEnvironment << {
-    assert javaVersion.java7: "Must use a Java 7 compatible JVM to perform this build. Current JVM is ${jvm}"
-    def systemCharset = java.nio.charset.Charset.defaultCharset().name()
-    assert systemCharset == "UTF-8": "Platform encoding must be UTF-8. Is currently $systemCharset. Set -Dfile.encoding=UTF-8."
+task verifyIsProductionBuildEnvironment {
+    doLast {
+        assert javaVersion.java7: "Must use a Java 7 compatible JVM to perform this build. Current JVM is ${jvm}"
+        def systemCharset = java.nio.charset.Charset.defaultCharset().name()
+        assert systemCharset == "UTF-8": "Platform encoding must be UTF-8. Is currently $systemCharset. Set -Dfile.encoding=UTF-8."
+    }
 }
 
 task waitForDaemonsToDie {
@@ -303,6 +323,7 @@ task install(type: Install) {
     description = 'Installs the minimal distribution into directory $gradle_installPath'
     group = 'build'
     with project(":distributions").binDistImage
+    with project(":distributions").versionInfo
     installDirPropertyName = 'gradle_installPath'
 }
 
@@ -367,3 +388,4 @@ if (isCiServer) {
         }
     }
 }
+

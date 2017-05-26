@@ -15,6 +15,7 @@
  */
 
 package org.gradle.api
+
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
@@ -38,7 +39,6 @@ class ConfigurationOnDemandIntegrationTest extends AbstractIntegrationSpec {
         buildFile << "task foo"
 
         when:
-        executer.requireGradleDistribution() // experiment to fix flaky test
         run("foo", "--configure-on-demand")
 
         then:
@@ -52,7 +52,6 @@ class ConfigurationOnDemandIntegrationTest extends AbstractIntegrationSpec {
         buildFile << "task foo"
 
         when:
-        executer.requireGradleDistribution() // experiment to fix flaky test
         run("foo", "--configure-on-demand", "--parallel")
 
         then:
@@ -323,9 +322,11 @@ project(':api') {
         file('a/build.gradle') << """
             configurations { conf }
             dependencies { conf project(path: ":b", configuration: "conf") }
-            task resolveConf << {
-              //resolves at execution time, forcing 'b' to get configured
-              configurations.conf.files
+            task resolveConf {
+                doLast {
+                    //resolves at execution time, forcing 'b' to get configured
+                    configurations.conf.files
+                }
             }
         """
 

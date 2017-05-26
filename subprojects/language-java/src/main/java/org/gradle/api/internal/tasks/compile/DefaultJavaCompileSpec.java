@@ -33,11 +33,13 @@ public class DefaultJavaCompileSpec extends DefaultJvmLanguageCompileSpec implem
         this.compileOptions = compileOptions;
     }
 
+    @Deprecated
     @Override
     public File getDependencyCacheDir() {
         return dependencyCacheDir;
     }
 
+    @Deprecated
     @Override
     public void setDependencyCacheDir(File dependencyCacheDir) {
         this.dependencyCacheDir = dependencyCacheDir;

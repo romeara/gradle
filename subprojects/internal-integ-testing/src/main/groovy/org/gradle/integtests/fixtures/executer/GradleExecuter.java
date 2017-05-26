@@ -18,6 +18,7 @@ package org.gradle.integtests.fixtures.executer;
 import groovy.lang.Closure;
 import groovy.lang.DelegatesTo;
 import org.gradle.api.Action;
+import org.gradle.internal.concurrent.Stoppable;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
 import org.gradle.test.fixtures.file.TestFile;
 
@@ -27,7 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public interface GradleExecuter {
+public interface GradleExecuter extends Stoppable {
     /**
      * Sets the working directory to use. Defaults to the test's temporary directory.
      */
@@ -168,6 +169,20 @@ public interface GradleExecuter {
      */
     GradleExecuter withBuildJvmOpts(Iterable<String> jvmOpts);
 
+    /**
+     * Activates the build cache
+     *
+     * @return this executer
+     */
+    GradleExecuter withBuildCacheEnabled();
+
+    /**
+     * Activates the build cache for a local directory
+     *
+     * @param cacheDir the directory for the cache
+     * @return this executer
+     */
+    GradleExecuter withLocalBuildCache(File cacheDir);
 
     /**
      * Don't set temp folder explicitly.
@@ -178,6 +193,11 @@ public interface GradleExecuter {
      * Don't set native services dir explicitly.
      */
     GradleExecuter withNoExplicitNativeServicesDir();
+
+    /**
+     * Disables the rendering of stack traces for deprecation logging.
+     */
+    GradleExecuter withFullDeprecationStackTraceDisabled();
 
     /**
      * Specifies that the executer should only those JVM args explicitly requested using {@link #withBuildJvmOpts(String...)} and {@link #withCommandLineGradleOpts(String...)} (where appropriate) for
@@ -271,6 +291,11 @@ public interface GradleExecuter {
     GradleExecuter expectDeprecationWarning();
 
     /**
+     * Disable deprecation warning checks.
+     */
+    GradleExecuter noDeprecationChecks();
+
+    /**
      * Disables asserting that class loaders were not eagerly created, potentially leading to performance problems.
      */
     GradleExecuter withEagerClassLoaderCreationCheckDisabled();
@@ -339,7 +364,7 @@ public interface GradleExecuter {
     /**
      * Where possible, starts the Gradle build process in suspended debug mode.
      */
-    GradleExecuter withDebug(boolean flag);
+    GradleExecuter startBuildProcessInDebugger(boolean flag);
 
     GradleExecuter withProfiler(String profilerArg);
 
@@ -351,4 +376,26 @@ public interface GradleExecuter {
     boolean isDebug();
 
     boolean isProfile();
+
+    /**
+     * Starts the launcher JVM (daemon client) in suspended debug mode
+     */
+    GradleExecuter startLauncherInDebugger(boolean debugLauncher);
+
+    boolean isDebugLauncher();
+
+    /**
+     * Clears previous settings so that instance can be reused
+     */
+    GradleExecuter reset();
+
+    /**
+     * Measures the duration of the execution
+     */
+    GradleExecuter withDurationMeasurement(DurationMeasurement durationMeasurement);
+
+    /**
+     * Returns true if this executer uses a daemon
+     */
+    boolean isUseDaemon();
 }

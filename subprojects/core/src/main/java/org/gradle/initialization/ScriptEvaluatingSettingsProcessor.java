@@ -25,7 +25,8 @@ import org.gradle.api.internal.initialization.ScriptHandlerFactory;
 import org.gradle.configuration.ScriptPlugin;
 import org.gradle.configuration.ScriptPluginFactory;
 import org.gradle.groovy.scripts.ScriptSource;
-import org.gradle.util.Clock;
+import org.gradle.internal.time.Timer;
+import org.gradle.internal.time.Timers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,14 +54,14 @@ public class ScriptEvaluatingSettingsProcessor implements SettingsProcessor {
 
     public SettingsInternal process(GradleInternal gradle,
                                     SettingsLocation settingsLocation,
-                                    ClassLoaderScope baseClassLoaderScope,
+                                    ClassLoaderScope buildRootClassLoaderScope,
                                     StartParameter startParameter) {
-        Clock settingsProcessingClock = new Clock();
+        Timer settingsProcessingClock = Timers.startTimer();
         Map<String, String> properties = propertiesLoader.mergeProperties(Collections.<String, String>emptyMap());
         SettingsInternal settings = settingsFactory.createSettings(gradle, settingsLocation.getSettingsDir(),
-                settingsLocation.getSettingsScriptSource(), properties, startParameter, baseClassLoaderScope);
+                settingsLocation.getSettingsScriptSource(), properties, startParameter, buildRootClassLoaderScope);
         applySettingsScript(settingsLocation, settings);
-        LOGGER.debug("Timing: Processing settings took: {}", settingsProcessingClock.getTime());
+        LOGGER.debug("Timing: Processing settings took: {}", settingsProcessingClock.getElapsed());
         return settings;
     }
 

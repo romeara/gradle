@@ -26,6 +26,7 @@ import spock.lang.Issue
 import spock.lang.Unroll
 
 import static org.gradle.test.matchers.UserAgentMatcher.matchesNameAndVersion
+import static org.hamcrest.core.StringContains.containsString
 
 class MavenPublishIntegrationTest extends AbstractIntegrationSpec {
     @Rule public final HttpServer server = new HttpServer()
@@ -60,7 +61,7 @@ uploadArchives {
         succeeds 'uploadArchives'
 
         then:
-        def module = mavenRepo.module('group', 'root', 1.0)
+        def module = mavenRepo.module('group', 'root', '1.0')
         module.assertArtifactsPublished('root-1.0.jar', 'root-1.0.pom')
     }
 
@@ -157,7 +158,7 @@ uploadArchives {
         succeeds 'uploadArchives'
 
         then:
-        def module = mavenRepo.module('group', 'root', 1.0)
+        def module = mavenRepo.module('group', 'root', '1.0')
         module.assertPublished()
         module.assertArtifactsPublished('root-1.0.pom', 'root-1.0-source.jar')
     }
@@ -197,7 +198,7 @@ uploadArchives {
         def replacements = file("build/replacements")
         replacements.assertHasDescendants('root-1.0.jar')
 
-        def module = mavenRepo.module('group', 'root', 1.0)
+        def module = mavenRepo.module('group', 'root', '1.0')
         module.assertPublished()
         module.assertArtifactsPublished('root-1.0.pom', 'root-1.0.jar')
 
@@ -252,7 +253,7 @@ uploadArchives {
         succeeds 'uploadArchives'
 
         then:
-        def module = mavenRepo.module('group', 'root', 1.0)
+        def module = mavenRepo.module('group', 'root', '1.0')
         module.assertArtifactsPublished('root-1.0.jar', 'root-1.0.jar.sig', 'root-1.0.pom', 'root-1.0.pom.sig')
     }
 
@@ -516,5 +517,213 @@ uploadArchives {
         def pom = localM2Repo.module("group", "root", "1.0").parsedPom
         def exclusions = pom.scopes.compile.dependencies['commons-collections:commons-collections:3.2.2'].exclusions
         exclusions.size() == 1 && exclusions[0].groupId=='*' && exclusions[0].artifactId=='*'
+    }
+
+    def "dependencies de-duplication uses a 0 priority for unmapped configurations"() {
+        given:
+        def localM2Repo = m2.mavenRepo()
+        executer.beforeExecute(m2)
+
+        and:
+        settingsFile << "rootProject.name = 'root'"
+        buildFile << """
+            apply plugin: 'maven'
+            apply plugin: 'java'
+
+            group = 'group'
+            version = '1.0'
+
+            configurations {
+                unmapped
+                compile {
+                    extendsFrom unmapped
+                }
+            }
+
+            dependencies {
+                unmapped('ch.qos.logback:logback-classic:1.1.7') {
+                    exclude group: 'ch.qos.logback', module: 'logback-core'
+                }
+                compile('ch.qos.logback:logback-classic:1.1.5') {
+                    exclude group: 'org.slf4j', module: 'slf4j-api'
+                }
+            }
+        """.stripIndent()
+
+        when:
+        run 'install'
+
+        then:
+        def pom = localM2Repo.module("group", "root", "1.0").parsedPom
+        pom.scopes.compile.assertDependsOn 'ch.qos.logback:logback-classic:1.1.5'
+        def exclusions = pom.scopes.compile.expectDependency('ch.qos.logback:logback-classic:1.1.5').exclusions;
+        exclusions.size() == 1
+        exclusions[0].groupId == 'org.slf4j'
+        exclusions[0].artifactId == 'slf4j-api'
+        pom.scopes.provided == null
+        pom.scopes.runtime == null
+        pom.scopes.test == null
+    }
+
+    def "dependency de-duplication takes custom configuration to scope mapping into account"() {
+        given:
+        def localM2Repo = m2.mavenRepo()
+        executer.beforeExecute(m2)
+
+        and:
+        settingsFile << "rootProject.name = 'root'"
+        buildFile << """
+            apply plugin: 'maven'
+            apply plugin: 'java'
+
+            group = 'group'
+            version = '1.0'
+
+            configurations {
+                unmapped
+                compile {
+                    extendsFrom unmapped
+                }
+            }
+            conf2ScopeMappings.addMapping(400, configurations.unmapped, 'compile')
+
+            dependencies {
+                unmapped('ch.qos.logback:logback-classic:1.1.7') {
+                    exclude group: 'ch.qos.logback', module: 'logback-core'
+                }
+                compile('ch.qos.logback:logback-classic:1.1.5') {
+                    exclude group: 'org.slf4j', module: 'slf4j-api'
+                }
+            }
+        """.stripIndent()
+
+        when:
+        run 'install'
+
+        then:
+        def pom = localM2Repo.module("group", "root", "1.0").parsedPom
+        pom.scopes.compile.assertDependsOn 'ch.qos.logback:logback-classic:1.1.7'
+        def exclusions = pom.scopes.compile.expectDependency('ch.qos.logback:logback-classic:1.1.7').exclusions;
+        exclusions.size() == 1
+        exclusions[0].groupId == 'ch.qos.logback'
+        exclusions[0].artifactId == 'logback-core'
+        pom.scopes.provided == null
+        pom.scopes.runtime == null
+        pom.scopes.test == null
+    }
+
+    @Issue('GRADLE-3494')
+    def "dependencies de-duplication handles null versions"() {
+        given:
+        def localM2Repo = m2.mavenRepo()
+        executer.beforeExecute(m2)
+
+        and:
+        settingsFile << "rootProject.name = 'root'"
+        buildFile << """
+            apply plugin: 'maven'
+            apply plugin: 'java'
+
+            group = 'group'
+            version = '1.0'
+
+            dependencies {
+                compile('ch.qos.logback:logback-classic:1.1.5') {
+                    exclude group: 'org.slf4j', module: 'slf4j-api'
+                }
+                compile('ch.qos.logback:logback-classic') {
+                    exclude group: 'ch.qos.logback', module: 'logback-core'
+                }
+            }
+        """.stripIndent()
+
+        when:
+        run 'install'
+
+        then:
+        def pom = localM2Repo.module("group", "root", "1.0").parsedPom
+        pom.scopes.compile.assertDependsOn 'ch.qos.logback:logback-classic:1.1.5'
+        def exclusions = pom.scopes.compile.expectDependency('ch.qos.logback:logback-classic:1.1.5').exclusions;
+        exclusions.size() == 1
+        exclusions[0].groupId == 'org.slf4j'
+        exclusions[0].artifactId == 'slf4j-api'
+        pom.scopes.provided == null
+        pom.scopes.runtime == null
+        pom.scopes.test == null
+    }
+
+    @Issue('GRADLE-3496')
+    def "dependencies are de-duplicated using the higher version on the same scope and exclusions from the higher version"() {
+        given:
+        def localM2Repo = m2.mavenRepo()
+        executer.beforeExecute(m2)
+
+        and:
+        settingsFile << "rootProject.name = 'root'"
+        buildFile << """
+            apply plugin: 'maven'
+            apply plugin: 'java'
+
+            group = 'group'
+            version = '1.0'
+
+            dependencies {
+                compile('ch.qos.logback:logback-classic:1.1.5') {
+                    exclude group: 'org.slf4j', module: 'slf4j-api'
+                }
+                compile('ch.qos.logback:logback-classic:1.1.7') {
+                    exclude group: 'ch.qos.logback', module: 'logback-core'
+                }
+            }
+        """.stripIndent()
+
+        when:
+        run 'install'
+
+        then:
+        def pom = localM2Repo.module("group", "root", "1.0").parsedPom
+        pom.scopes.compile.assertDependsOn 'ch.qos.logback:logback-classic:1.1.7'
+        def exclusions = pom.scopes.compile.expectDependency('ch.qos.logback:logback-classic:1.1.7').exclusions;
+        exclusions.size() == 1
+        exclusions[0].groupId == 'ch.qos.logback'
+        exclusions[0].artifactId == 'logback-core'
+        pom.scopes.provided == null
+        pom.scopes.runtime == null
+        pom.scopes.test == null
+    }
+
+    def "fails gracefully if trying to publish a directory with Maven"() {
+
+        given:
+        file('someDir/a.txt') << 'some text'
+        buildFile << """
+
+        apply plugin: 'base'
+        apply plugin: 'maven'
+
+        uploadArchives {
+            repositories {
+                mavenDeployer {
+                    repository(url: "${mavenRepo.uri.toURL()}")
+                }
+            }
+        }
+
+        configurations {
+            archives
+        }
+
+        artifacts {
+            archives file("someDir")
+        }
+
+        """
+
+        when:
+        fails 'uploadArchives'
+
+        then:
+        failure.assertHasCause "Could not publish configuration 'archives'"
+        failure.assertThatCause(containsString('Cannot publish a directory'))
     }
 }

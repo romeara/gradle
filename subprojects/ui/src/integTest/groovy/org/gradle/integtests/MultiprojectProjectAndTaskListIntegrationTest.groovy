@@ -25,21 +25,29 @@ import org.gradle.openapi.external.foundation.ProjectVersion1
 import org.gradle.openapi.wrappers.foundation.GradleInterfaceWrapperVersion1
 import org.gradle.testfixtures.internal.NativeServicesTestFixture
 import org.junit.Assert
+import org.junit.Assume
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
 import java.util.concurrent.TimeUnit
 
+import static org.gradle.util.TestPrecondition.NOT_JDK_IBM
+
 /**
  This tests the multiproject sample with the GradleView mechanism.
  */
 class MultiprojectProjectAndTaskListIntegrationTest extends AbstractIntegrationTest {
-    @Rule public final Sample sample = new Sample(testDirectoryProvider, 'java/multiproject')
+
+    @Rule
+    public final Sample sample = new Sample(testDirectoryProvider, 'java/multiproject')
     GradlePluginLord gradlePluginLord = new GradlePluginLord()
 
     @Before
     void setUp() {
+        // Tests are flaky on IBM JDK
+        Assume.assumeTrue(NOT_JDK_IBM.fulfilled);
+
         NativeServicesTestFixture.initialize()
         gradlePluginLord.setCurrentDirectory(sample.dir);
         gradlePluginLord.setGradleHomeDirectory(distribution.gradleHomeDir);
@@ -56,12 +64,8 @@ class MultiprojectProjectAndTaskListIntegrationTest extends AbstractIntegrationT
 
     @Test
     public void multiProjectjavaProjectSample() {
-        //refresh the projects and wait. This will throw an exception if it fails.
-        TestUtility.refreshProjectsBlocking(gradlePluginLord, 80, TimeUnit.SECONDS);
 
-        //get the root project
-        List<ProjectView> projects = gradlePluginLord.getProjects();
-        Assert.assertNotNull(projects);
+        List<ProjectView> projects = refreshAndGetProjects()
 
         //make sure there weren't other root projects found.
         Assert.assertEquals(1, projects.size());
@@ -91,18 +95,16 @@ class MultiprojectProjectAndTaskListIntegrationTest extends AbstractIntegrationT
         Assert.assertEquals(3, rootProject.getSubProjects().size());
     }
 
-   /**
-    This tests that the wrappers for projects and tasks are working
-    */
-   @Test
-   public void testOpenAPIWrapperProjectAndTaskList()
-   {
-        GradleInterfaceWrapperVersion1 wrapper = new GradleInterfaceWrapperVersion1( gradlePluginLord );
+    /**
+     This tests that the wrappers for projects and tasks are working
+     */
+    @Test
+    public void testOpenAPIWrapperProjectAndTaskList() {
+
+        GradleInterfaceWrapperVersion1 wrapper = new GradleInterfaceWrapperVersion1(gradlePluginLord);
 
         //the rest of this uses the open API mechanism to access the projects and tasks
-
-        //refresh the projects and wait. This will throw an exception if it fails.
-        TestUtility.refreshProjectsBlocking(gradlePluginLord, 80, TimeUnit.SECONDS);
+        refreshProjectsAndWait()
 
         //get the root project
         List<ProjectVersion1> projects = wrapper.getRootProjects();
@@ -137,65 +139,70 @@ class MultiprojectProjectAndTaskListIntegrationTest extends AbstractIntegrationT
 
         //I don't want to keep the actual tasks in synch, but let's make sure there's something there.
         def tasks = apiProject.getTasks()
-        Assert.assertNotNull( tasks );
-        Assert.assertFalse( tasks.isEmpty() );
-   }
+        Assert.assertNotNull(tasks);
+        Assert.assertFalse(tasks.isEmpty());
+    }
 
-   /**
-   * This tests ProjectView.getSubProjectFromFullPath. Specifically, the first character
-    * is optionally a colon. So this tests it both ways.
-   */
-   @Test
-   public void testSubProjectFromFullPath()
-   {
-      //refresh the projects and wait. This will throw an exception if it fails.
-      TestUtility.refreshProjectsBlocking(gradlePluginLord, 80, TimeUnit.SECONDS);
+    /**
+     * This tests ProjectView.getSubProjectFromFullPath. Specifically, the first character
+     * is optionally a colon. So this tests it both ways.
+     */
+    @Test
+    public void testSubProjectFromFullPath() {
 
-      //get the root project
-      List<ProjectView> projects = gradlePluginLord.getProjects();
-      Assert.assertNotNull(projects);
-      Assert.assertFalse( projects.isEmpty() );
+        List<ProjectView> projects = refreshAndGetProjects()
+        Assert.assertFalse(projects.isEmpty());
 
-      ProjectView rootProject = projects.get(0)
+        ProjectView rootProject = projects.get(0)
 
-      //test it using no prefixed colon
-      ProjectView foundProject1 = rootProject.getSubProjectFromFullPath("services:webservice")
-      Assert.assertNotNull( foundProject1 )
+        //test it using no prefixed colon
+        ProjectView foundProject1 = rootProject.getSubProjectFromFullPath("services:webservice")
+        Assert.assertNotNull(foundProject1)
 
-      //test it using a prefixed colon
-      ProjectView foundProject2 = rootProject.getSubProjectFromFullPath(":services:webservice")
-      Assert.assertNotNull( foundProject2 )
+        //test it using a prefixed colon
+        ProjectView foundProject2 = rootProject.getSubProjectFromFullPath(":services:webservice")
+        Assert.assertNotNull(foundProject2)
 
-      //should both the same project
-      Assert.assertEquals( foundProject1, foundProject2 )
-   }
+        //should both the same project
+        Assert.assertEquals(foundProject1, foundProject2)
+    }
 
-   /**
-   * This tests TaskView.getTaskFromFullPath. Specifically, the first character
-    * is optionally a colon. So this tests it both ways.
-   */
-   @Test
-   public void testGetTaskFromFullPath()
-   {
-      //refresh the projects and wait. This will throw an exception if it fails.
-      TestUtility.refreshProjectsBlocking(gradlePluginLord, 100, TimeUnit.SECONDS);
+    /**
+     * This tests TaskView.getTaskFromFullPath. Specifically, the first character
+     * is optionally a colon. So this tests it both ways.
+     */
+    @Test
+    public void testGetTaskFromFullPath() {
 
-      //get the root project
-      List<ProjectView> projects = gradlePluginLord.getProjects();
-      Assert.assertNotNull(projects);
-      Assert.assertFalse( projects.isEmpty() );
+        List<ProjectView> projects = refreshAndGetProjects()
+        Assert.assertFalse(projects.isEmpty());
 
-      ProjectView rootProject = projects.get(0)
+        ProjectView rootProject = projects.get(0)
 
-      //test it using no prefixed colon
-      TaskView foundTask1 = rootProject.getTaskFromFullPath("api:build")
-      Assert.assertNotNull( foundTask1 )
+        //test it using no prefixed colon
+        TaskView foundTask1 = rootProject.getTaskFromFullPath("api:build")
+        Assert.assertNotNull(foundTask1)
 
-      //test it using a prefixed colon
-      TaskView foundTask2 = rootProject.getTaskFromFullPath(":api:build")
-      Assert.assertNotNull( foundTask2 )
+        //test it using a prefixed colon
+        TaskView foundTask2 = rootProject.getTaskFromFullPath(":api:build")
+        Assert.assertNotNull(foundTask2)
 
-      //should both the same project
-      Assert.assertEquals( foundTask1, foundTask2 )      
-   }
+        //should both the same project
+        Assert.assertEquals(foundTask1, foundTask2)
+    }
+
+    private List<ProjectView> refreshAndGetProjects() {
+        refreshProjectsAndWait()
+
+        List<ProjectView> projects = gradlePluginLord.getProjects()
+        Assert.assertNotNull(projects)
+        projects
+    }
+
+    /**
+     * Refresh the projects and wait. This will throw an exception if it fails.
+     */
+    private refreshProjectsAndWait() {
+        TestUtility.refreshProjectsBlocking(gradlePluginLord, 100, TimeUnit.SECONDS)
+    }
 }

@@ -16,13 +16,18 @@
 package org.gradle.api.artifacts;
 
 import groovy.lang.Closure;
+import groovy.lang.DelegatesTo;
+import org.gradle.api.Action;
+import org.gradle.api.Nullable;
 
 import java.util.Map;
 import java.util.Set;
 
+import static groovy.lang.Closure.DELEGATE_FIRST;
+
 /**
  * A {@code ModuleDependency} is a {@link org.gradle.api.artifacts.Dependency} on a module outside the current
- * project.
+ * build.
  * <p>
  * For examples on configuring the exclude rules please refer to {@link #exclude(java.util.Map)}.
  */
@@ -54,7 +59,6 @@ public interface ModuleDependency extends Dependency {
      *     exclude group: 'org.unwanted', module: 'iAmBuggy' //by both name and group
      *   }
      * }
-    
      * </pre>
      *
      * @param excludeProperties the properties to define the exclude rule.
@@ -97,7 +101,21 @@ public interface ModuleDependency extends Dependency {
      *
      * @return this
      */
-    DependencyArtifact artifact(Closure configureClosure);
+    DependencyArtifact artifact(@DelegatesTo(value = DependencyArtifact.class, strategy = DELEGATE_FIRST) Closure configureClosure);
+
+    /**
+     * <p>Adds an artifact to this dependency. The given action is passed a {@link
+     * org.gradle.api.artifacts.DependencyArtifact} instance, which it can configure.</p>
+     *
+     * <p>If no artifact is added to a dependency, an implicit default artifact is used. This default artifact has the
+     * same name as the module and its type and extension is <em>jar</em>. If at least one artifact is explicitly added,
+     * the implicit default artifact won't be used any longer.</p>
+     *
+     * @return this
+     *
+     * @since 3.1
+     */
+    DependencyArtifact artifact(Action<? super DependencyArtifact> configureAction);
 
     /**
      * Returns whether this dependency should be resolved including or excluding its transitive dependencies.
@@ -108,7 +126,7 @@ public interface ModuleDependency extends Dependency {
 
     /**
      * Sets whether this dependency should be resolved including or excluding its transitive dependencies. The artifacts
-     * belonging to this dependency might themselve have dependencies on other artifacts. The latter are called
+     * belonging to this dependency might themselves have dependencies on other artifacts. The latter are called
      * transitive dependencies.
      *
      * @param transitive Whether transitive dependencies should be resolved.
@@ -118,11 +136,19 @@ public interface ModuleDependency extends Dependency {
 
     /**
      * Returns the configuration of this dependency module (not the configurations this dependency belongs too). Never
-     * returns null. The default value for the configuration is {@link #DEFAULT_CONFIGURATION}. A dependency source
-     * might have multiple configurations. Every configuration represents a different set of artifacts and dependencies
-     * for this dependency module.
+     * returns null. The default value for the configuration is {@link #DEFAULT_CONFIGURATION}.
+     *
+     * @deprecated Use {@link #getTargetConfiguration()} instead
      */
+    @Deprecated
     String getConfiguration();
+
+    /**
+     * Returns the requested target configuration of this dependency. This is the name of the configuration in the target module that should be used when
+     * selecting the matching configuration. If {@code null}, a default configuration should be used.
+     */
+    @Nullable
+    String getTargetConfiguration();
 
     /**
      * {@inheritDoc}

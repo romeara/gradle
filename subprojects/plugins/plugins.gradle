@@ -26,6 +26,7 @@ dependencies {
     compile libraries.groovy
 
     compile project(':core')
+    compile project(':workers')
     compile project(':dependencyManagement')
     compile project(':reporting')
     compile project(':platformJvm')
@@ -48,12 +49,13 @@ dependencies {
     integTestRuntime project(":maven")
 }
 
+def wrapperJarDir = file("$buildDir/generated-resources/wrapper-jar")
 evaluationDependsOn(":wrapper")
 task wrapperJar(type: Copy) {
-    from project(":wrapper").executableJar.outputs.files
-    into generatedResourcesDir
+    from project(":wrapper").executableJar
+    into wrapperJarDir
 }
-sourceSets.main.output.dir generatedResourcesDir, builtBy: wrapperJar
+sourceSets.main.output.dir wrapperJarDir, builtBy: wrapperJar
 
 useTestFixtures()
 useTestFixtures(sourceSet: "testFixtures")

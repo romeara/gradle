@@ -16,93 +16,94 @@
 package org.gradle.api.internal.notations
 
 import org.gradle.api.artifacts.Dependency
-import org.gradle.api.artifacts.SelfResolvingDependency
 import org.gradle.api.internal.ClassPathRegistry
 import org.gradle.api.internal.artifacts.dependencies.DefaultSelfResolvingDependency
 import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory
-import org.gradle.api.internal.file.FileCollectionInternal
-import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.cache.GeneratedGradleJarCache
+import org.gradle.api.internal.file.TestFiles
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarFactory
-import org.gradle.cache.CacheBuilder
-import org.gradle.cache.CacheRepository
-import org.gradle.cache.PersistentCache
-import org.gradle.cache.internal.FileLockManager
-import org.gradle.internal.classpath.ClassPath
+import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarType
+import org.gradle.internal.classpath.DefaultClassPath
 import org.gradle.internal.installation.CurrentGradleInstallation
 import org.gradle.internal.installation.GradleInstallation
-import org.gradle.internal.reflect.Instantiator
-import org.gradle.internal.typeconversion.NotationParserBuilder
 import org.gradle.internal.logging.progress.ProgressLoggerFactory
+import org.gradle.internal.reflect.DirectInstantiator
+import org.gradle.internal.typeconversion.NotationParserBuilder
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
-import org.gradle.util.GradleVersion
+import org.gradle.util.UsesNativeServices
 import org.junit.Rule
 import spock.lang.Specification
 
-import static RuntimeShadedJarFactory.CACHE_DISPLAY_NAME
-import static RuntimeShadedJarFactory.CACHE_KEY
-import static org.gradle.cache.internal.filelock.LockOptionsBuilder.mode
+import static org.gradle.api.internal.artifacts.dsl.dependencies.DependencyFactory.ClassPathNotation.*
 
-public class DependencyClassPathNotationConverterTest extends Specification {
+@UsesNativeServices
+class DependencyClassPathNotationConverterTest extends Specification {
+
     @Rule
     TestNameTestDirectoryProvider testDirectoryProvider = new TestNameTestDirectoryProvider()
 
-    def instantiator = Mock(Instantiator)
+    def instantiator = DirectInstantiator.INSTANCE
     def classPathRegistry = Mock(ClassPathRegistry)
-    def fileResolver = Mock(FileResolver)
-    def cacheRepository = Mock(CacheRepository)
-    def cacheBuilder = Mock(CacheBuilder)
-    def cache = Mock(PersistentCache)
+    def fileResolver = TestFiles.resolver()
+    def cache = Mock(GeneratedGradleJarCache)
     def progressLoggerFactory = Mock(ProgressLoggerFactory)
+    def shadedJarFactory = Mock(RuntimeShadedJarFactory)
+    def gradleInstallation = Mock(CurrentGradleInstallation)
+    def factory = new DependencyClassPathNotationConverter(instantiator, classPathRegistry, fileResolver, shadedJarFactory, gradleInstallation)
+    def shadedApiJar = testDirectoryProvider.file('gradle-api-shaded.jar')
+    def localGroovyFiles = [testDirectoryProvider.file('groovy.jar')]
+    def installationBeaconFiles = [testDirectoryProvider.file('gradle-installation.jar')]
 
-    def "parses classpath literals"() {
-        given:
-        def dependency = Mock(SelfResolvingDependency)
-        def gradleApiFileCollection = Mock(FileCollectionInternal)
-        def gradleApiClasspath = Mock(ClassPath)
-        def gradleApiFiles = [new File('foo')]
-        def localGroovyClasspath = Mock(ClassPath)
-        def localGroovyFileCollection = Mock(FileCollectionInternal)
-        def localGroovyFiles = [new File('bar')]
-        def installationBeaconClasspath = Mock(ClassPath)
-        def installationBeaconFileCollection = Mock(FileCollectionInternal)
-        def installationBeaconFiles = [new File('baz')]
+    def setup() {
+        def gradleApiFiles = [testDirectoryProvider.file('gradle-api.jar')]
+        def gradleTestKitFiles = [testDirectoryProvider.file('gradle-test-kit.jar')]
 
-        and:
-        classPathRegistry.getClassPath('GRADLE_API') >> gradleApiClasspath
-        gradleApiClasspath.asFiles >> gradleApiFiles
-        fileResolver.resolveFiles(gradleApiFiles) >> gradleApiFileCollection
-        classPathRegistry.getClassPath('LOCAL_GROOVY') >> localGroovyClasspath
-        localGroovyClasspath.asFiles >> localGroovyFiles
-        fileResolver.resolveFiles(localGroovyFiles) >> localGroovyFileCollection
-        classPathRegistry.getClassPath('GRADLE_INSTALLATION_BEACON') >> installationBeaconClasspath
-        installationBeaconClasspath.asFiles >> installationBeaconFiles
-        fileResolver.resolveFiles(installationBeaconFiles) >> installationBeaconFileCollection
+        classPathRegistry.getClassPath('GRADLE_API') >> new DefaultClassPath(gradleApiFiles)
+        classPathRegistry.getClassPath('GRADLE_TEST_KIT') >> new DefaultClassPath(gradleTestKitFiles)
+        classPathRegistry.getClassPath('LOCAL_GROOVY') >> new DefaultClassPath(localGroovyFiles)
+        classPathRegistry.getClassPath('GRADLE_INSTALLATION_BEACON') >> new DefaultClassPath(installationBeaconFiles)
 
-        instantiator.newInstance(DefaultSelfResolvingDependency.class, _) >> dependency
+        gradleInstallation.installation >> new GradleInstallation(testDirectoryProvider.file("gradle-home"))
 
+        shadedJarFactory.get(RuntimeShadedJarType.API, _) >> shadedApiJar
+    }
+
+    def "parses classpath literal"() {
         when:
-        def gradleImplDepsProvider = new RuntimeShadedJarFactory(cacheRepository, progressLoggerFactory, GradleVersion.current().version)
-        def factory = new DependencyClassPathNotationConverter(instantiator, classPathRegistry, fileResolver, gradleImplDepsProvider, new CurrentGradleInstallation(new GradleInstallation(testDirectoryProvider.file("gradle-home"))))
-        def out = parse(factory, DependencyFactory.ClassPathNotation.GRADLE_API)
+        def out = parse(GRADLE_API)
 
         then:
-        1 * cacheRepository.cache(CACHE_KEY) >> cacheBuilder
-        1 * cacheBuilder.withDisplayName(CACHE_DISPLAY_NAME) >> cacheBuilder
-        1 * cacheBuilder.withLockOptions(mode(FileLockManager.LockMode.None)) >> cacheBuilder
-        1 * cacheBuilder.open() >> { cache }
-        1 * cache.useCache(_, _)
-        out.is dependency
+        out instanceof DefaultSelfResolvingDependency
+        out.source.files as List == [shadedApiJar] + localGroovyFiles + installationBeaconFiles
+    }
+
+    def "reuses dependency instances"() {
+        when:
+        def out = parse(GRADLE_API)
+
+        then:
+        out instanceof DefaultSelfResolvingDependency
 
         when: // same instance is reused
-        def out2 = parse(factory, DependencyFactory.ClassPathNotation.GRADLE_API)
+        def out2 = parse(GRADLE_API)
 
         then:
-        0 * instantiator._
         out2.is out
     }
 
-    def parse(def factory, def value) {
-        return NotationParserBuilder.toType(Dependency).fromType(DependencyFactory.ClassPathNotation, factory).toComposite().parseNotation(value)
+    def "assigns component identifier to dependency"() {
+        expect:
+        def dep = parse(notation)
+        dep.targetComponentId.displayName == displayName
+
+        where:
+        notation        | displayName
+        GRADLE_API      | "Gradle API"
+        GRADLE_TEST_KIT | "Gradle TestKit"
+        LOCAL_GROOVY    | "Local Groovy"
     }
 
+    def parse(def value) {
+        return NotationParserBuilder.toType(Dependency).fromType(DependencyFactory.ClassPathNotation, factory).toComposite().parseNotation(value)
+    }
 }

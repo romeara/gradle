@@ -17,8 +17,8 @@
 package org.gradle.process;
 
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
 
@@ -149,7 +149,7 @@ public interface JavaForkOptions extends ProcessForkOptions {
      *
      * @return The bootstrap classpath. Never returns null.
      */
-    @InputFiles
+    @Classpath
     FileCollection getBootstrapClasspath();
 
     /**

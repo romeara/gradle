@@ -22,16 +22,20 @@ import org.gradle.api.Incubating;
 import org.gradle.api.Transformer;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.internal.hash.DefaultHasher;
+import org.gradle.api.internal.hash.DefaultFileHasher;
 import org.gradle.api.internal.initialization.loadercache.HashClassPathSnapshotter;
-import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.util.CollectionUtils;
 import org.gradle.util.GUtil;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Properties;
 
@@ -52,7 +56,7 @@ public class PluginUnderTestMetadata extends DefaultTask {
     /**
      * The code under test. Defaults to {@code sourceSets.main.runtimeClasspath}.
      */
-    @InputFiles
+    @Classpath
     public FileCollection getPluginClasspath() {
         return pluginClasspath;
     }
@@ -90,7 +94,7 @@ public class PluginUnderTestMetadata extends DefaultTask {
 
             // As these files are inputs into this task, they have just been snapshotted by the task up-to-date checking.
             // We should be reusing those persistent snapshots to avoid reading into memory again.
-            HashClassPathSnapshotter classPathSnapshotter = new HashClassPathSnapshotter(new DefaultHasher());
+            HashClassPathSnapshotter classPathSnapshotter = new HashClassPathSnapshotter(new DefaultFileHasher());
             String hash = classPathSnapshotter.snapshot(new DefaultClassPath(getPluginClasspath())).getStrongHash().toString();
             properties.setProperty(IMPLEMENTATION_CLASSPATH_HASH_PROP_KEY, hash);
         }

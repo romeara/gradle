@@ -5,6 +5,7 @@
 /buildSrc/build
 /subprojects/*/build
 /subprojects/docs/src/samples/*/*/build
+/subprojects/internal-android-performance-testing/build-android-libs
 
 # IDEA
 # ----
@@ -71,3 +72,6 @@ atlassian-ide-plugin.xml
 # Logs
 # ----
 /*.log
+
+# oh-my-zsh gradle plugin
+.gradletasknamecache

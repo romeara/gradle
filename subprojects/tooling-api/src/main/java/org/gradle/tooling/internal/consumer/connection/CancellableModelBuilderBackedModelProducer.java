@@ -36,7 +36,6 @@ public class CancellableModelBuilderBackedModelProducer extends HasCompatibility
     protected final Transformer<RuntimeException, RuntimeException> exceptionTransformer;
 
     public CancellableModelBuilderBackedModelProducer(ProtocolToModelAdapter adapter, VersionDetails versionDetails, ModelMapping modelMapping, InternalCancellableConnection builder, Transformer<RuntimeException, RuntimeException> exceptionTransformer) {
-        super(versionDetails);
         this.adapter = adapter;
         this.versionDetails = versionDetails;
         this.modelMapping = modelMapping;
@@ -57,6 +56,6 @@ public class CancellableModelBuilderBackedModelProducer extends HasCompatibility
         } catch (RuntimeException e) {
             throw exceptionTransformer.transform(e);
         }
-        return adapter.adapt(type, result.getModel(), getCompatibilityMapping(operationParameters));
+        return applyCompatibilityMapping(adapter.builder(type), operationParameters).build(result.getModel());
     }
 }

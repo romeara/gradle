@@ -16,9 +16,10 @@
 
 package org.gradle.internal.component.local.model;
 
-import org.gradle.api.tasks.TaskDependency;
 import org.gradle.internal.component.model.ConfigurationMetadata;
+import org.gradle.internal.component.model.LocalOriginDependencyMetadata;
 
+import java.util.List;
 import java.util.Set;
 
 public interface LocalConfigurationMetadata extends ConfigurationMetadata {
@@ -27,8 +28,14 @@ public interface LocalConfigurationMetadata extends ConfigurationMetadata {
 
     Set<String> getExtendsFrom();
 
+    @Override
+    List<? extends LocalOriginDependencyMetadata> getDependencies();
+
+    @Override
+    Set<? extends LocalComponentArtifactMetadata> getArtifacts();
+
     /**
-     * The task dependencies required to build any artifacts and self-resolving dependencies for this configuration.
+     * Returns the files attached to this configuration, if any. These should be represented as dependencies, but are currently represented as files as a migration step.
      */
-    TaskDependency getDirectBuildDependencies();
+    Set<LocalFileDependencyMetadata> getFiles();
 }

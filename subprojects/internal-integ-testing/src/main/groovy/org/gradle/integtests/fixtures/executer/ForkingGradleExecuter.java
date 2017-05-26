@@ -28,6 +28,7 @@ import org.gradle.process.internal.JvmOptions;
 import org.gradle.test.fixtures.file.TestDirectoryProvider;
 import org.gradle.test.fixtures.file.TestFile;
 import org.gradle.testfixtures.internal.NativeServicesTestFixture;
+import org.gradle.util.GradleVersion;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -41,6 +42,14 @@ public class ForkingGradleExecuter extends AbstractGradleExecuter {
 
     public ForkingGradleExecuter(GradleDistribution distribution, TestDirectoryProvider testDirectoryProvider) {
         super(distribution, testDirectoryProvider);
+    }
+
+    public ForkingGradleExecuter(GradleDistribution distribution, TestDirectoryProvider testDirectoryProvider, GradleVersion version) {
+        super(distribution, testDirectoryProvider, version);
+    }
+
+    public ForkingGradleExecuter(GradleDistribution distribution, TestDirectoryProvider testDirectoryProvider, GradleVersion gradleVersion, IntegrationTestBuildContext buildContext) {
+        super(distribution, testDirectoryProvider, gradleVersion, buildContext);
     }
 
     public void assertCanExecute() throws AssertionError {
@@ -179,7 +188,7 @@ public class ForkingGradleExecuter extends AbstractGradleExecuter {
     }
 
     protected ForkingGradleHandle createGradleHandle(Action<ExecutionResult> resultAssertion, String encoding, Factory<? extends AbstractExecHandleBuilder> execHandleFactory) {
-        return new ForkingGradleHandle(getStdinPipe(), isUseDaemon(), resultAssertion, encoding, execHandleFactory);
+        return new ForkingGradleHandle(getStdinPipe(), isUseDaemon(), resultAssertion, encoding, execHandleFactory, getDurationMeasurement());
     }
 
     protected ExecutionResult doRun() {

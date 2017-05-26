@@ -16,43 +16,48 @@
 package org.gradle.internal.service.scopes
 
 import org.gradle.StartParameter
+import org.gradle.api.internal.GradleInternal
 import org.gradle.api.internal.cache.StringInterner
-import org.gradle.api.internal.changedetection.state.CachingTreeVisitor
+import org.gradle.api.internal.changedetection.state.FileCollectionSnapshotter
 import org.gradle.api.internal.changedetection.state.InMemoryTaskArtifactCache
 import org.gradle.api.internal.file.FileCollectionFactory
 import org.gradle.api.internal.file.FileResolver
+import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory
+import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.internal.tasks.TaskExecuter
-import org.gradle.api.internal.tasks.execution.ExecuteAtMostOnceTaskExecuter
 import org.gradle.api.invocation.Gradle
 import org.gradle.cache.CacheBuilder
 import org.gradle.cache.CacheRepository
 import org.gradle.cache.PersistentCache
 import org.gradle.execution.TaskGraphExecuter
 import org.gradle.internal.classloader.ClassLoaderHierarchyHasher
-import org.gradle.internal.concurrent.ExecutorFactory
 import org.gradle.internal.environment.GradleBuildEnvironment
 import org.gradle.internal.event.ListenerManager
 import org.gradle.internal.nativeplatform.filesystem.FileSystem
-import org.gradle.internal.operations.BuildOperationProcessor
-import org.gradle.internal.operations.DefaultBuildOperationProcessor
 import org.gradle.internal.reflect.Instantiator
+import org.gradle.internal.remote.internal.inet.InetAddressFactory
 import org.gradle.internal.service.DefaultServiceRegistry
 import org.gradle.internal.service.ServiceRegistry
+import org.gradle.internal.time.TimeProvider
 import spock.lang.Specification
 
 class TaskExecutionServicesTest extends Specification {
-    final ServiceRegistry parent = Mock()
-    final Gradle gradle = Mock()
+    final def parent = Mock(ServiceRegistry)
+    final def gradle = Mock(GradleInternal)
     final def services = new DefaultServiceRegistry(parent).addProvider(new TaskExecutionServices())
 
     def "makes a TaskExecutor available"() {
         given:
         CacheRepository cacheRepository = Mock()
         CacheBuilder cacheBuilder = Mock()
+
         _ * parent.get(Gradle) >> gradle
+        _ * parent.get(GradleInternal) >> gradle
         gradle.getTaskGraph() >> Mock(TaskGraphExecuter)
         _ * parent.get(ListenerManager) >> Mock(ListenerManager)
-        _ * parent.get(StartParameter) >> Mock(StartParameter)
+        _ * parent.get(StartParameter) >> Mock(StartParameter) {
+            getSystemPropertiesArgs() >> [:]
+        }
         _ * parent.get(GradleBuildEnvironment) >> Stub(GradleBuildEnvironment)
         _ * parent.get(CacheRepository) >> cacheRepository
         _ * parent.get(Instantiator) >> Mock(Instantiator)
@@ -62,25 +67,18 @@ class TaskExecutionServicesTest extends Specification {
         _ * parent.get(FileSystem) >> Mock(FileSystem)
         _ * parent.get(FileCollectionFactory) >> Mock(FileCollectionFactory)
         _ * parent.get(StringInterner) >> new StringInterner()
+        _ * parent.get(DirectoryFileTreeFactory) >> Mock(DirectoryFileTreeFactory)
         _ * parent.get(ClassLoaderHierarchyHasher) >> Mock(ClassLoaderHierarchyHasher)
-        _ * parent.get(CachingTreeVisitor) >> Mock(CachingTreeVisitor)
+        _ * parent.getAll(FileCollectionSnapshotter) >> []
+        _ * parent.get(TimeProvider) >> Mock(TimeProvider)
+        _ * parent.get(InetAddressFactory) >> Mock(InetAddressFactory)
+        gradle.getRootProject() >> Mock(ProjectInternal)
         _ * cacheRepository.cache(gradle, 'taskArtifacts') >> cacheBuilder
         _ * cacheBuilder.withDisplayName(!null) >> cacheBuilder
         _ * cacheBuilder.withLockOptions(!null) >> cacheBuilder
         _ * cacheBuilder.open() >> Mock(PersistentCache)
 
         expect:
-        services.get(TaskExecuter) instanceof ExecuteAtMostOnceTaskExecuter
         services.get(TaskExecuter).is(services.get(TaskExecuter))
-    }
-
-    def "makes a BuildOperationProcessor available"() {
-        given:
-        _ * parent.get(StartParameter) >> Mock(StartParameter)
-        _ * parent.get(ExecutorFactory) >> Mock(ExecutorFactory)
-
-        expect:
-        services.get(BuildOperationProcessor) instanceof DefaultBuildOperationProcessor
-        services.get(BuildOperationProcessor).is(services.get(BuildOperationProcessor))
     }
 }

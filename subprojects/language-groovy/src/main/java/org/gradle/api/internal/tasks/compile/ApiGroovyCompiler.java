@@ -36,6 +36,7 @@ import org.gradle.api.internal.file.collections.SimpleFileCollection;
 import org.gradle.api.internal.tasks.SimpleWorkResult;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.WorkResult;
+import org.gradle.internal.classloader.ClassLoaderUtils;
 import org.gradle.internal.classloader.DefaultClassLoaderFactory;
 import org.gradle.internal.classloader.FilteringClassLoader;
 import org.gradle.internal.classpath.DefaultClassPath;
@@ -134,7 +135,11 @@ public class ApiGroovyCompiler implements org.gradle.language.base.internal.comp
             unit.addSources(new File[]{new File("ForceStubGeneration.java")});
         }
 
-        unit.addSources(Iterables.toArray(spec.getSource(), File.class));
+        // Sort source files to work around https://issues.apache.org/jira/browse/GROOVY-7966
+        File[] sortedSourceFiles = Iterables.toArray(spec.getSource(), File.class);
+        Arrays.sort(sortedSourceFiles);
+        unit.addSources(sortedSourceFiles);
+
         unit.setCompilerFactory(new JavaCompilerFactory() {
             public JavaCompiler createCompiler(final CompilerConfiguration config) {
                 return new JavaCompiler() {
@@ -173,6 +178,8 @@ public class ApiGroovyCompiler implements org.gradle.language.base.internal.comp
             unit.compile();
         } catch (org.codehaus.groovy.control.CompilationFailedException e) {
             System.err.println(e.getMessage());
+            // Explicit flush, System.err is an auto-flushing PrintWriter unless it is replaced.
+            System.err.flush();
             throw new CompilationFailedException();
         } finally {
             // Remove compile and AST types from the Groovy loader
@@ -260,6 +267,6 @@ public class ApiGroovyCompiler implements org.gradle.language.base.internal.comp
     }
 
     private ClassLoader getExtClassLoader() {
-        return new DefaultClassLoaderFactory().getIsolatedSystemClassLoader();
+        return ClassLoaderUtils.getPlatformClassLoader();
     }
 }

@@ -23,13 +23,17 @@ import org.gradle.api.Incubating;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.project.IsolatedAntBuilder;
 import org.gradle.api.reporting.Reporting;
 import org.gradle.api.specs.Spec;
+import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.TaskCollection;
@@ -46,6 +50,7 @@ import java.util.concurrent.Callable;
 /**
  * Task to generate HTML, Xml and CSV reports of Jacoco coverage data.
  */
+@CacheableTask
 @Incubating
 public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsContainer> {
 
@@ -99,12 +104,19 @@ public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsC
      */
     @Override
     public JacocoReportsContainer reports(Closure closure) {
-        return (JacocoReportsContainer) reports.configure(closure);
+        return reports(new ClosureBackedAction<JacocoReportsContainer>(closure));
+    }
+
+    @Override
+    public JacocoReportsContainer reports(Action<? super JacocoReportsContainer> configureAction) {
+        configureAction.execute(reports);
+        return reports;
     }
 
     /**
      * Collection of execution data files to analyze.
      */
+    @PathSensitive(PathSensitivity.NONE)
     @InputFiles
     public FileCollection getExecutionData() {
         return executionData;
@@ -117,6 +129,7 @@ public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsC
     /**
      * Source sets that coverage should be reported for.
      */
+    @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     public FileCollection getSourceDirectories() {
         return sourceDirectories;
@@ -129,6 +142,7 @@ public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsC
     /**
      * Source sets that coverage should be reported for.
      */
+    @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     public FileCollection getClassDirectories() {
         return classDirectories;
@@ -142,6 +156,7 @@ public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsC
      * Additional class dirs that coverage data should be reported for.
      */
     @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     public FileCollection getAdditionalClassDirs() {
         return additionalClassDirs;
@@ -155,6 +170,7 @@ public class JacocoReport extends JacocoBase implements Reporting<JacocoReportsC
      * Additional source dirs for the classes coverage data is being reported for.
      */
     @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
     public FileCollection getAdditionalSourceDirs() {
         return additionalSourceDirs;

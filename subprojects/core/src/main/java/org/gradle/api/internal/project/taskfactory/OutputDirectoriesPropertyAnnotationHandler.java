@@ -15,24 +15,20 @@
  */
 package org.gradle.api.internal.project.taskfactory;
 
+import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.tasks.OutputDirectories;
-import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.TaskOutputFilePropertyBuilder;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.util.Collection;
+import java.util.concurrent.Callable;
 
-import static org.gradle.api.internal.project.taskfactory.OutputPropertyAnnotationUtil.validateDirectory;
 import static org.gradle.api.internal.tasks.TaskOutputsUtil.ensureDirectoryExists;
+import static org.gradle.api.internal.tasks.TaskOutputsUtil.validateDirectory;
 
 @SuppressWarnings("deprecation")
 public class OutputDirectoriesPropertyAnnotationHandler extends AbstractPluralOutputPropertyAnnotationHandler {
-
-    private static final String DEPRECATION_MESSAGE = String.format(
-        "Please use separate properties for each directory annotated with @%s, "
-        + "or change the property type to Map.",
-        OutputDirectory.class.getSimpleName()
-    );
 
     @Override
     public Class<? extends Annotation> getAnnotationType() {
@@ -40,8 +36,8 @@ public class OutputDirectoriesPropertyAnnotationHandler extends AbstractPluralOu
     }
 
     @Override
-    protected String getDeprecatedIterableMessage() {
-        return DEPRECATION_MESSAGE;
+    protected TaskOutputFilePropertyBuilder createPropertyBuilder(TaskPropertyActionContext context, TaskInternal task, Callable<Object> futureValue) {
+        return task.getOutputs().dirs(futureValue);
     }
 
     @Override

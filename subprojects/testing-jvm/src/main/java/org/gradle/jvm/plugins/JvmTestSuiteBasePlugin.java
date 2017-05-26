@@ -18,6 +18,7 @@ package org.gradle.jvm.plugins;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang.WordUtils;
 import org.gradle.api.Action;
+import org.gradle.api.attributes.AttributesSchema;
 import org.gradle.api.Incubating;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.component.LibraryBinaryIdentifier;
@@ -29,7 +30,7 @@ import org.gradle.api.tasks.testing.TestTaskReports;
 import org.gradle.internal.Cast;
 import org.gradle.internal.Transformers;
 import org.gradle.internal.component.local.model.DefaultLibraryBinaryIdentifier;
-import org.gradle.internal.component.local.model.UsageKind;
+import org.gradle.jvm.internal.resolve.UsageKind;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.jvm.JvmBinarySpec;
 import org.gradle.jvm.internal.DependencyResolvingClasspath;
@@ -40,8 +41,8 @@ import org.gradle.jvm.test.JvmTestSuiteBinarySpec;
 import org.gradle.jvm.test.internal.JvmTestSuiteBinarySpecInternal;
 import org.gradle.language.base.DependentSourceSet;
 import org.gradle.language.base.LanguageSourceSet;
-import org.gradle.language.base.internal.model.DefaultVariantsMetaData;
-import org.gradle.language.base.internal.resolve.LocalComponentResolveContext;
+import org.gradle.jvm.internal.resolve.DefaultVariantsMetaData;
+import org.gradle.jvm.internal.resolve.JvmLibraryResolveContext;
 import org.gradle.language.base.plugins.LifecycleBasePlugin;
 import org.gradle.model.*;
 import org.gradle.model.internal.manage.schema.ModelSchema;
@@ -106,19 +107,20 @@ public class JvmTestSuiteBasePlugin extends RuleSource {
         RepositoryHandler repositories = serviceRegistry.get(RepositoryHandler.class);
         List<ResolutionAwareRepository> resolutionAwareRepositories = CollectionUtils.collect(repositories, Transformers.cast(ResolutionAwareRepository.class));
         ModelSchema<? extends JvmTestSuiteBinarySpec> schema = Cast.uncheckedCast(modelSchemaStore.getSchema(((BinarySpecInternal) testBinary).getPublicType()));
-        testBinary.setRuntimeClasspath(configureRuntimeClasspath(testBinary, dependencyResolver, resolutionAwareRepositories, schema));
+        AttributesSchema attributesSchema = serviceRegistry.get(AttributesSchema.class);
+        testBinary.setRuntimeClasspath(configureRuntimeClasspath(testBinary, dependencyResolver, resolutionAwareRepositories, schema, attributesSchema));
     }
 
-    private static DependencyResolvingClasspath configureRuntimeClasspath(JvmTestSuiteBinarySpecInternal testBinary, ArtifactDependencyResolver dependencyResolver, List<ResolutionAwareRepository> resolutionAwareRepositories, ModelSchema<? extends JvmTestSuiteBinarySpec> schema) {
-        return new DependencyResolvingClasspath(testBinary, testBinary.getDisplayName(), dependencyResolver, resolutionAwareRepositories, createResolveContext(testBinary, schema));
+    private static DependencyResolvingClasspath configureRuntimeClasspath(JvmTestSuiteBinarySpecInternal testBinary, ArtifactDependencyResolver dependencyResolver, List<ResolutionAwareRepository> resolutionAwareRepositories, ModelSchema<? extends JvmTestSuiteBinarySpec> schema, AttributesSchema attributesSchema) {
+        return new DependencyResolvingClasspath(testBinary, testBinary.getDisplayName(), dependencyResolver, resolutionAwareRepositories, createResolveContext(testBinary, schema), attributesSchema);
     }
 
-    private static LocalComponentResolveContext createResolveContext(JvmTestSuiteBinarySpecInternal testBinary, ModelSchema<? extends JvmTestSuiteBinarySpec> schema) {
+    private static JvmLibraryResolveContext createResolveContext(JvmTestSuiteBinarySpecInternal testBinary, ModelSchema<? extends JvmTestSuiteBinarySpec> schema) {
         // TODO:Cedric find out why if we use the same ID directly, it fails resolution by trying to get the artifacts
         // from the resolving metadata instead of the resolved metadata
         LibraryBinaryIdentifier id = testBinary.getId();
         LibraryBinaryIdentifier thisId = new DefaultLibraryBinaryIdentifier(id.getProjectPath(), id.getLibraryName() + "Test", id.getVariant());
-        return new LocalComponentResolveContext(thisId,
+        return new JvmLibraryResolveContext(thisId,
             DefaultVariantsMetaData.extractFrom(testBinary, schema),
             runtimeDependencies(testBinary),
             UsageKind.RUNTIME,

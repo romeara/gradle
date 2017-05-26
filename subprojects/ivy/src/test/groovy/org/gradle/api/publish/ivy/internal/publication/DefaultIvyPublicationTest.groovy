@@ -15,8 +15,13 @@
  */
 
 package org.gradle.api.publish.ivy.internal.publication
+
 import org.gradle.api.InvalidUserDataException
-import org.gradle.api.artifacts.*
+import org.gradle.api.artifacts.DependencyArtifact
+import org.gradle.api.artifacts.ExcludeRule
+import org.gradle.api.artifacts.ModuleDependency
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.internal.AsmBackedClassGenerator
 import org.gradle.api.internal.ClassGeneratorBackedInstantiator
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier
@@ -114,7 +119,7 @@ class DefaultIvyPublicationTest extends Specification {
         moduleDependency.group >> "org"
         moduleDependency.name >> "name"
         moduleDependency.version >> "version"
-        moduleDependency.configuration >> "dep-configuration"
+        moduleDependency.targetConfiguration >> "dep-configuration"
         moduleDependency.artifacts >> [artifact]
         moduleDependency.excludeRules >> [exclude]
 
@@ -147,7 +152,7 @@ class DefaultIvyPublicationTest extends Specification {
 
         and:
         projectDependencyResolver.resolve(projectDependency) >> DefaultModuleVersionIdentifier.newId("pub-org", "pub-module", "pub-revision")
-        projectDependency.configuration >> "dep-configuration"
+        projectDependency.targetConfiguration >> "dep-configuration"
         projectDependency.excludeRules >> [exclude]
 
         when:

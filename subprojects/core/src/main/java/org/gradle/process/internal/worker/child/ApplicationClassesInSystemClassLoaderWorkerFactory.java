@@ -23,6 +23,8 @@ import org.gradle.api.internal.ClassPathRegistry;
 import org.gradle.api.internal.file.TemporaryFileProvider;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.internal.classpath.ClassPath;
+import org.gradle.internal.io.StreamByteBuffer;
+import org.gradle.internal.jvm.inspection.JvmVersionDetector;
 import org.gradle.internal.process.ArgWriter;
 import org.gradle.internal.remote.Address;
 import org.gradle.internal.remote.internal.inet.MultiChoiceAddress;
@@ -30,15 +32,10 @@ import org.gradle.internal.remote.internal.inet.MultiChoiceAddressSerializer;
 import org.gradle.internal.serialize.OutputStreamBackedEncoder;
 import org.gradle.process.internal.JavaExecHandleBuilder;
 import org.gradle.process.internal.streams.EncodedStream;
-import org.gradle.process.internal.worker.CachedJavaExecutableVersionProber;
-import org.gradle.process.internal.worker.DefaultJavaExecutableVersionProber;
 import org.gradle.process.internal.worker.DefaultWorkerProcessBuilder;
 import org.gradle.process.internal.worker.GradleWorkerMain;
-import org.gradle.process.internal.worker.JavaExecutableVersionProber;
 import org.gradle.util.GUtil;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -73,11 +70,12 @@ import java.util.Set;
 public class ApplicationClassesInSystemClassLoaderWorkerFactory implements WorkerFactory {
     private final ClassPathRegistry classPathRegistry;
     private final TemporaryFileProvider temporaryFileProvider;
-    private final JavaExecutableVersionProber versionProber = new CachedJavaExecutableVersionProber(new DefaultJavaExecutableVersionProber());
+    private final JvmVersionDetector jvmVersionDetector;
 
-    public ApplicationClassesInSystemClassLoaderWorkerFactory(ClassPathRegistry classPathRegistry, TemporaryFileProvider temporaryFileProvider) {
+    public ApplicationClassesInSystemClassLoaderWorkerFactory(ClassPathRegistry classPathRegistry, TemporaryFileProvider temporaryFileProvider, JvmVersionDetector jvmVersionDetector) {
         this.classPathRegistry = classPathRegistry;
         this.temporaryFileProvider = temporaryFileProvider;
+        this.jvmVersionDetector = jvmVersionDetector;
     }
 
     @Override
@@ -104,9 +102,9 @@ public class ApplicationClassesInSystemClassLoaderWorkerFactory implements Worke
 
         // Serialize configuration for the worker process to it stdin
 
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        StreamByteBuffer buffer = new StreamByteBuffer();
         try {
-            DataOutputStream outstr = new DataOutputStream(new EncodedStream.EncodedOutput(bytes));
+            DataOutputStream outstr = new DataOutputStream(new EncodedStream.EncodedOutput(buffer.getOutputStream()));
             if (!useOptionsFile) {
                 // Serialize the application classpath, this is consumed by BootstrapSecurityManager
                 outstr.writeInt(applicationClasspath.size());
@@ -143,12 +141,11 @@ public class ApplicationClassesInSystemClassLoaderWorkerFactory implements Worke
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        byte[] encodedConfig = bytes.toByteArray();
-        execSpec.setStandardInput(new ByteArrayInputStream(encodedConfig));
+        execSpec.setStandardInput(buffer.getInputStream());
     }
 
     private boolean shouldUseOptionsFile(JavaExecHandleBuilder execSpec) {
-        JavaVersion executableVersion = versionProber.probeVersion(execSpec);
+        JavaVersion executableVersion = jvmVersionDetector.getJavaVersion(execSpec.getExecutable());
         return executableVersion != null && executableVersion.isJava9Compatible();
     }
 

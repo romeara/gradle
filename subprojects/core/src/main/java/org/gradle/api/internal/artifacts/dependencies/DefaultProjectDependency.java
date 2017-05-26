@@ -18,6 +18,7 @@ package org.gradle.api.internal.artifacts.dependencies;
 
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.internal.artifacts.CachingDependencyResolveContext;
@@ -27,14 +28,17 @@ import org.gradle.api.internal.tasks.AbstractTaskDependency;
 import org.gradle.api.internal.tasks.TaskDependencyInternal;
 import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
 import org.gradle.initialization.ProjectAccessListener;
+import org.gradle.internal.exceptions.ConfigurationNotConsumableException;
+import org.gradle.util.DeprecationLogger;
+import org.gradle.util.GUtil;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.Set;
 
 public class DefaultProjectDependency extends AbstractModuleDependency implements ProjectDependencyInternal {
     private final ProjectInternal dependencyProject;
     private final boolean buildProjectDependencies;
-    private final TaskDependencyImpl taskDependency = new TaskDependencyImpl();
     private final ProjectAccessListener projectAccessListener;
 
     public DefaultProjectDependency(ProjectInternal dependencyProject, ProjectAccessListener projectAccessListener, boolean buildProjectDependencies) {
@@ -65,13 +69,26 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
         return dependencyProject.getVersion().toString();
     }
 
+    @Deprecated
     public Configuration getProjectConfiguration() {
+        DeprecationLogger.nagUserOfDiscontinuedMethod("ProjectDependency.getProjectConfiguration()");
         return dependencyProject.getConfigurations().getByName(getConfiguration());
+    }
+
+    @Override
+    public Configuration findProjectConfiguration() {
+        ConfigurationContainer dependencyConfigurations = getDependencyProject().getConfigurations();
+        String declaredConfiguration = getTargetConfiguration();
+        Configuration selectedConfiguration = dependencyConfigurations.getByName(GUtil.elvis(declaredConfiguration, Dependency.DEFAULT_CONFIGURATION));
+        if (!selectedConfiguration.isCanBeConsumed()) {
+            throw new ConfigurationNotConsumableException(dependencyProject.getDisplayName(), selectedConfiguration.getName());
+        }
+        return selectedConfiguration;
     }
 
     public ProjectDependency copy() {
         DefaultProjectDependency copiedProjectDependency = new DefaultProjectDependency(dependencyProject,
-                getConfiguration(), projectAccessListener, buildProjectDependencies);
+            getTargetConfiguration(), projectAccessListener, buildProjectDependencies);
         copyTo(copiedProjectDependency);
         return copiedProjectDependency;
     }
@@ -81,7 +98,7 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
     }
 
     public Set<File> resolve(boolean transitive) {
-        CachingDependencyResolveContext context = new CachingDependencyResolveContext(transitive);
+        CachingDependencyResolveContext context = new CachingDependencyResolveContext(transitive, Collections.<String, String>emptyMap());
         context.add(this);
         return context.resolve().getFiles();
     }
@@ -94,14 +111,14 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
     public void resolve(DependencyResolveContext context) {
         boolean transitive = isTransitive() && context.isTransitive();
         if (transitive) {
-            for (Dependency dependency : getProjectConfiguration().getAllDependencies()) {
+            for (Dependency dependency : findProjectConfiguration().getAllDependencies()) {
                 context.add(dependency);
             }
         }
     }
 
     public TaskDependencyInternal getBuildDependencies() {
-        return taskDependency;
+        return new TaskDependencyImpl();
     }
 
     public boolean contentEquals(Dependency dependency) {
@@ -133,7 +150,8 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
         if (!this.getDependencyProject().equals(that.getDependencyProject())) {
             return false;
         }
-        if (!this.getConfiguration().equals(that.getConfiguration())) {
+        if (getTargetConfiguration() != null ? !this.getTargetConfiguration().equals(that.getTargetConfiguration())
+            : that.getTargetConfiguration() != null) {
             return false;
         }
         if (this.buildProjectDependencies != that.buildProjectDependencies) {
@@ -144,14 +162,14 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
 
     @Override
     public int hashCode() {
-        return getDependencyProject().hashCode() ^ getConfiguration().hashCode() ^ (buildProjectDependencies ? 1 : 0);
+        return getDependencyProject().hashCode() ^ (getTargetConfiguration() != null ? getTargetConfiguration().hashCode() : 31) ^ (buildProjectDependencies ? 1 : 0);
     }
 
 
     @Override
     public String toString() {
         return "DefaultProjectDependency{" + "dependencyProject='" + dependencyProject + '\'' + ", configuration='"
-                + getConfiguration() + '\'' + '}';
+                + (getTargetConfiguration() == null ? Dependency.DEFAULT_CONFIGURATION : getTargetConfiguration()) + '\'' + '}';
     }
 
     private class TaskDependencyImpl extends AbstractTaskDependency {
@@ -162,7 +180,7 @@ public class DefaultProjectDependency extends AbstractModuleDependency implement
             }
             projectAccessListener.beforeResolvingProjectDependency(dependencyProject);
 
-            Configuration configuration = getProjectConfiguration();
+            Configuration configuration = findProjectConfiguration();
             context.add(configuration);
             context.add(configuration.getAllArtifacts());
         }

@@ -16,14 +16,26 @@
 
 package org.gradle.testing.base.plugins;
 
+import org.gradle.api.Action;
+import org.gradle.api.DefaultTask;
 import org.gradle.api.Incubating;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.internal.TaskInternal;
+import org.gradle.api.internal.project.taskfactory.ITaskFactory;
+import org.gradle.api.tasks.TaskContainer;
 import org.gradle.language.base.plugins.ComponentModelBasePlugin;
-import org.gradle.model.*;
+import org.gradle.language.base.plugins.LifecycleBasePlugin;
+import org.gradle.model.Each;
+import org.gradle.model.Finalize;
+import org.gradle.model.Model;
+import org.gradle.model.ModelMap;
+import org.gradle.model.Mutate;
+import org.gradle.model.Path;
+import org.gradle.model.RuleSource;
 import org.gradle.platform.base.BinaryContainer;
-import org.gradle.platform.base.BinaryTasksCollection;
+import org.gradle.platform.base.BinarySpec;
 import org.gradle.platform.base.ComponentType;
 import org.gradle.platform.base.TypeBuilder;
 import org.gradle.platform.base.internal.BinarySpecInternal;
@@ -65,13 +77,52 @@ public class TestingModelBasePlugin implements Plugin<Project> {
             }
         }
 
-        @Mutate
-        void attachBinariesToCheckLifecycle(@Path("tasks.check") Task checkTask, @Path("binaries") ModelMap<TestSuiteBinarySpec> binaries) {
-            for (TestSuiteBinarySpec testBinary : binaries) {
-                if (testBinary.isBuildable()) {
-                    BinaryTasksCollection tasks = testBinary.getTasks();
-                    if (tasks instanceof TestSuiteTaskCollection) {
-                        checkTask.dependsOn(((TestSuiteTaskCollection) tasks).getRun());
+        @Finalize
+        public void defineBinariesCheckTasks(@Each BinarySpecInternal binary, ITaskFactory taskFactory) {
+            if (binary.isLegacyBinary()) {
+                return;
+            }
+            TaskInternal binaryLifecycleTask = taskFactory.create(binary.getNamingScheme().getTaskName("check"), DefaultTask.class);
+            binaryLifecycleTask.setGroup(LifecycleBasePlugin.VERIFICATION_GROUP);
+            binaryLifecycleTask.setDescription("Check " + binary);
+            binary.setCheckTask(binaryLifecycleTask);
+        }
+
+        @Finalize
+        void copyBinariesCheckTasksToTaskContainer(TaskContainer tasks, BinaryContainer binaries) {
+            for (BinarySpec binary : binaries) {
+                Task checkTask = binary.getCheckTask();
+                if (checkTask != null) {
+                    tasks.add(checkTask);
+                }
+            }
+        }
+
+        @Finalize
+        void linkTestSuiteBinariesRunTaskToBinariesCheckTasks(@Path("binaries") ModelMap<TestSuiteBinarySpec> binaries) {
+            binaries.afterEach(new Action<TestSuiteBinarySpec>() {
+                @Override
+                public void execute(TestSuiteBinarySpec testSuiteBinary) {
+                    if (testSuiteBinary.isBuildable()) {
+                        if (testSuiteBinary.getTasks() instanceof TestSuiteTaskCollection) {
+                            testSuiteBinary.checkedBy(((TestSuiteTaskCollection) testSuiteBinary.getTasks()).getRun());
+                        }
+                        BinarySpec testedBinary = testSuiteBinary.getTestedBinary();
+                        if (testedBinary != null && testedBinary.isBuildable()) {
+                            testedBinary.checkedBy(testSuiteBinary.getCheckTask());
+                        }
+                    }
+                }
+            });
+        }
+
+        @Finalize
+        void attachBinariesCheckTasksToCheckLifecycle(@Path("tasks.check") Task checkTask, @Path("binaries") ModelMap<BinarySpec> binaries) {
+            for (BinarySpec binary : binaries) {
+                if (binary.isBuildable()) {
+                    Task binaryCheckTask = binary.getCheckTask();
+                    if (binaryCheckTask != null) {
+                        checkTask.dependsOn(binaryCheckTask);
                     }
                 }
             }

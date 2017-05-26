@@ -26,6 +26,7 @@ import org.gradle.api.internal.file.ImmutableDirectoryTree;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.internal.FileUtils;
+import org.gradle.internal.nativeintegration.filesystem.FileSystem;
 
 import java.io.File;
 
@@ -34,9 +35,11 @@ class WatchPointsRegistry {
     private final CombinedRootSubset rootSubset = new CombinedRootSubset();
     private ImmutableSet<? extends File> allRequestedRoots;
     private final boolean createNewStartingPointsUnderExistingRoots;
+    private final FileSystem fileSystem;
 
-    public WatchPointsRegistry(boolean createNewStartingPointsUnderExistingRoots) {
+    public WatchPointsRegistry(boolean createNewStartingPointsUnderExistingRoots, FileSystem fileSystem) {
         this.createNewStartingPointsUnderExistingRoots = createNewStartingPointsUnderExistingRoots;
+        this.fileSystem = fileSystem;
         allRequestedRoots = ImmutableSet.of();
     }
 

@@ -27,6 +27,14 @@ import org.gradle.launcher.daemon.client.DaemonClientFactory;
 import org.gradle.launcher.daemon.client.DaemonClientGlobalServices;
 import org.gradle.launcher.exec.BuildExecuter;
 import org.gradle.tooling.internal.adapter.ProtocolToModelAdapter;
+import org.gradle.tooling.internal.provider.serialization.ClassLoaderCache;
+import org.gradle.tooling.internal.provider.serialization.ClasspathInferer;
+import org.gradle.tooling.internal.provider.serialization.ClientSidePayloadClassLoaderFactory;
+import org.gradle.tooling.internal.provider.serialization.ClientSidePayloadClassLoaderRegistry;
+import org.gradle.tooling.internal.provider.serialization.DefaultPayloadClassLoaderRegistry;
+import org.gradle.tooling.internal.provider.serialization.ModelClassLoaderFactory;
+import org.gradle.tooling.internal.provider.serialization.PayloadSerializer;
+import org.gradle.tooling.internal.provider.serialization.WellKnownClassLoaderRegistry;
 
 /**
  * Shared services for a tooling API provider connection.
@@ -50,24 +58,28 @@ public class ConnectionScopeServices {
         return shutdownCoordinator;
     }
 
-    ProviderConnection createProviderConnection(BuildExecuter buildActionExecuter, DaemonClientFactory daemonClientFactory,
+    ProviderConnection createProviderConnection(BuildExecuter buildActionExecuter,
+                                                DaemonClientFactory daemonClientFactory,
                                                 ServiceRegistry serviceRegistry,
                                                 JvmVersionDetector jvmVersionDetector,
                                                 // This is here to trigger creation of the ShutdownCoordinator. Could do this in a nicer way
                                                 ShutdownCoordinator shutdownCoordinator) {
+        ClassLoaderCache classLoaderCache = new ClassLoaderCache();
         return new ProviderConnection(
                 serviceRegistry,
                 loggingServices,
                 daemonClientFactory,
                 buildActionExecuter,
                 new PayloadSerializer(
-                        new ClientSidePayloadClassLoaderRegistry(
+                        new WellKnownClassLoaderRegistry(
+                            new ClientSidePayloadClassLoaderRegistry(
                                 new DefaultPayloadClassLoaderRegistry(
-                                        new ClassLoaderCache(),
-                                        new ClientSidePayloadClassLoaderFactory(
-                                                new ModelClassLoaderFactory())),
-                                new ClasspathInferer())),
-                jvmVersionDetector
+                                    classLoaderCache,
+                                    new ClientSidePayloadClassLoaderFactory(
+                                        new ModelClassLoaderFactory())),
+                                new ClasspathInferer(),
+                                classLoaderCache))),
+            jvmVersionDetector
         );
     }
 

@@ -16,8 +16,13 @@
 
 package org.gradle.api.internal.changedetection.state;
 
+import com.google.common.base.Charsets;
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
+
 class DirSnapshot implements IncrementalFileSnapshot {
     private static final DirSnapshot INSTANCE = new DirSnapshot();
+    private static final HashCode SIGNATURE = Hashing.md5().hashString(DirSnapshot.class.getName(), Charsets.UTF_8);
 
     private DirSnapshot() {
     }
@@ -33,5 +38,15 @@ class DirSnapshot implements IncrementalFileSnapshot {
 
     public boolean isContentUpToDate(IncrementalFileSnapshot snapshot) {
         return snapshot instanceof DirSnapshot;
+    }
+
+    @Override
+    public HashCode getHash() {
+        return SIGNATURE;
+    }
+
+    @Override
+    public String toString() {
+        return "DIR";
     }
 }

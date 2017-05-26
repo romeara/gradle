@@ -29,6 +29,7 @@ class DependencyReportTaskIntegrationTest extends AbstractIntegrationSpec {
         buildFile << """
 allprojects {
     configurations { compile; "default" { extendsFrom compile } }
+    configurations { zzz }
     group = "group"
     version = 1.0
 }
@@ -63,8 +64,8 @@ compile
 
     def "marks modules that can't be resolved as 'FAILED'"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).dependsOnModules("unknown").publish()
-        mavenRepo.module("foo", "baz", 1.0).dependsOnModules("bar").publish()
+        mavenRepo.module("foo", "bar", "1.0").dependsOnModules("unknown").publish()
+        mavenRepo.module("foo", "baz", "1.0").dependsOnModules("bar").publish()
 
         file("build.gradle") << """
             repositories {
@@ -126,8 +127,8 @@ foo
 
     def "marks modules that can't be resolved after conflict resolution as 'FAILED'"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).dependsOn("foo", "baz", "2.0").publish()
-        mavenRepo.module("foo", "baz", 1.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").dependsOn("foo", "baz", "2.0").publish()
+        mavenRepo.module("foo", "baz", "1.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -155,9 +156,9 @@ config
 
     def "marks modules that can't be resolved after forcing a different version as 'FAILED'"() {
         given:
-        mavenRepo.module("org", "libA", 1.0).dependsOn("org", "libB", "1.0").dependsOn("org", "libC", "1.0").publish()
-        mavenRepo.module("org", "libB", 1.0).publish()
-        mavenRepo.module("org", "libC", 1.0).publish()
+        mavenRepo.module("org", "libA", "1.0").dependsOn("org", "libB", "1.0").dependsOn("org", "libC", "1.0").publish()
+        mavenRepo.module("org", "libB", "1.0").publish()
+        mavenRepo.module("org", "libC", "1.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -191,8 +192,8 @@ config
 
     def "renders dependencies even if the configuration was already resolved"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -204,8 +205,10 @@ config
                 foo 'foo:bar:2.0'
             }
 
-            task resolveConf << {
-                configurations.foo.each { println it }
+            task resolveConf {
+                doLast {
+                    configurations.foo.each { println it }
+                }
             }
         """
 
@@ -218,12 +221,12 @@ config
 
     def "renders selected versions in case of a conflict"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
-        mavenRepo.module("foo", "bar", 3.0).dependsOn('foo', 'baz', '5.0').publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
+        mavenRepo.module("foo", "bar", "3.0").dependsOn('foo', 'baz', '5.0').publish()
 
 
-        mavenRepo.module("foo", "baz", 5.0).publish()
+        mavenRepo.module("foo", "baz", "5.0").publish()
 
         file("settings.gradle") << """include 'a', 'b', 'c', 'd', 'e'
 rootProject.name = 'root'
@@ -336,13 +339,13 @@ conf
 
     def "shows selected versions in case of a multi-phase conflict"() {
         given:
-        mavenRepo.module("foo", "foo", 1.0).publish()
-        mavenRepo.module("foo", "foo", 2.0).publish()
-        mavenRepo.module("foo", "foo", 3.0).publish()
-        mavenRepo.module("foo", "foo", 4.0).publish()
+        mavenRepo.module("foo", "foo", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.0").publish()
+        mavenRepo.module("foo", "foo", "3.0").publish()
+        mavenRepo.module("foo", "foo", "4.0").publish()
 
-        mavenRepo.module("bar", "bar", 5.0).dependsOn("foo", "foo", "4.0").publish()
-        mavenRepo.module("bar", "bar", 6.0).dependsOn("foo", "foo", "3.0").publish()
+        mavenRepo.module("bar", "bar", "5.0").dependsOn("foo", "foo", "4.0").publish()
+        mavenRepo.module("bar", "bar", "6.0").dependsOn("foo", "foo", "3.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -376,12 +379,12 @@ conf
 
     def "deals with dynamic versions with conflicts"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
-        mavenRepo.module("foo", "foo", 1.0).dependsOn("foo", "bar", "1.0").publish()
-        mavenRepo.module("foo", "foo", 2.0).dependsOn("foo", "bar", "1.0").publish()
-        mavenRepo.module("foo", "foo", 2.5).dependsOn("foo", "bar", "2.0").publish()
+        mavenRepo.module("foo", "foo", "1.0").dependsOn("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.0").dependsOn("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "foo", "2.5").dependsOn("foo", "bar", "2.0").publish()
 
         file("build.gradle") << """
             repositories {
@@ -450,7 +453,7 @@ conf
         ivyRepo.module("org", "leaf2").publish()
         ivyRepo.module("org", "leaf3").publish()
         ivyRepo.module("org", "leaf4").publish()
-        ivyRepo.module("org", "leaf4", 2.0).publish()
+        ivyRepo.module("org", "leaf4", "2.0").publish()
 
         //also asserting on correct order of transitive dependencies
         ivyRepo.module("org", "middle1").dependsOn('leaf1', 'leaf2').publish()
@@ -603,8 +606,8 @@ conf
 
     def "renders a mix of project and external dependencies"() {
         given:
-        mavenRepo.module("foo", "bar", 1.0).publish()
-        mavenRepo.module("foo", "bar", 2.0).publish()
+        mavenRepo.module("foo", "bar", "1.0").publish()
+        mavenRepo.module("foo", "bar", "2.0").publish()
 
         file("settings.gradle") << """include 'a', 'b', 'a:c', 'd', 'e'
 rootProject.name = 'root'
@@ -800,6 +803,51 @@ compile
 compile
 +--- org.utils:api:1.3 -> 0.1
 \\--- org.original:original:1.0 -> org.other:another:0.1
+"""
+    }
+
+    void "doesn't fail if a configuration is not resolvable"() {
+        mavenRepo.module("foo", "foo", '1.0').publish()
+        mavenRepo.module("foo", "bar", '2.0').publish()
+
+        file("build.gradle") << """
+            repositories {
+               maven { url "${mavenRepo.uri}" }
+            }
+            configurations {
+                api.canBeResolved = false
+                compile.extendsFrom api
+            }
+            dependencies {
+                api 'foo:foo:1.0'
+                compile 'foo:bar:2.0'
+            }
+        """
+
+        when:
+        run ":dependencies"
+
+        then:
+        output.contains """
+api (n)
+\\--- foo:foo:1.0 (n)
+
+compile
++--- foo:foo:1.0
+\\--- foo:bar:2.0
+
+(n) - Not resolved (configuration is not meant to be resolved)
+"""
+
+        when:
+        run ":dependencies", "--configuration", "api"
+
+        then:
+        output.contains """
+api (n)
+\\--- foo:foo:1.0 (n)
+
+(n) - Not resolved (configuration is not meant to be resolved)
 """
     }
 }

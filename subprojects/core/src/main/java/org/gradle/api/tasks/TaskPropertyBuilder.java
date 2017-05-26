@@ -20,7 +20,9 @@ import org.gradle.api.Incubating;
 import org.gradle.internal.HasInternalProtocol;
 
 /**
- * Describes a property of a task that contains zero or more files.
+ * Describes a property of a task.
+ *
+ * @since 3.0
  */
 @Incubating
 @HasInternalProtocol

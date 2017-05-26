@@ -15,25 +15,20 @@
  */
 package org.gradle.api.internal.project.taskfactory;
 
-import org.gradle.api.tasks.OutputDirectory;
-import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.internal.TaskInternal;
+import org.gradle.api.internal.tasks.TaskOutputsUtil;
 import org.gradle.api.tasks.OutputFiles;
+import org.gradle.api.tasks.TaskOutputFilePropertyBuilder;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.util.Collection;
+import java.util.concurrent.Callable;
 
 import static org.gradle.api.internal.tasks.TaskOutputsUtil.ensureParentDirectoryExists;
 
 @SuppressWarnings("deprecation")
 public class OutputFilesPropertyAnnotationHandler extends AbstractPluralOutputPropertyAnnotationHandler {
-
-    private static final String DEPRECATION_MESSAGE = String.format(
-        "Please use separate properties for each file annotated with @%s, "
-        + "reorganize output files under a single output directory annotated with @%s, "
-        + "or change the property type to Map.",
-        OutputFile.class.getSimpleName(), OutputDirectory.class.getSimpleName()
-    );
 
     @Override
     public Class<? extends Annotation> getAnnotationType() {
@@ -41,13 +36,13 @@ public class OutputFilesPropertyAnnotationHandler extends AbstractPluralOutputPr
     }
 
     @Override
-    protected String getDeprecatedIterableMessage() {
-        return DEPRECATION_MESSAGE;
+    protected TaskOutputFilePropertyBuilder createPropertyBuilder(TaskPropertyActionContext context, TaskInternal task, Callable<Object> futureValue) {
+        return task.getOutputs().files(futureValue);
     }
 
     @Override
     protected void doValidate(String propertyName, File file, Collection<String> messages) {
-        OutputPropertyAnnotationUtil.validateFile(propertyName, file, messages);
+        TaskOutputsUtil.validateFile(propertyName, file, messages);
     }
 
     @Override

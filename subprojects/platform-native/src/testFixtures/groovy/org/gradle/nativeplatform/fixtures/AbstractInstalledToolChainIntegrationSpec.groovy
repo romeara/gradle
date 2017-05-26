@@ -16,10 +16,12 @@
 
 package org.gradle.nativeplatform.fixtures
 
+import org.gradle.api.internal.file.BaseDirFileResolver
+import org.gradle.api.internal.file.TestFiles
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.internal.hash.HashUtil
 import org.gradle.internal.os.OperatingSystem
-import org.gradle.nativeplatform.internal.CompilerOutputFileNamingScheme
+import org.gradle.internal.time.TrueTimeProvider
+import org.gradle.nativeplatform.internal.CompilerOutputFileNamingSchemeFactory
 import org.gradle.test.fixtures.file.TestFile
 import org.junit.runner.RunWith
 /**
@@ -55,6 +57,10 @@ allprojects { p ->
         return toolChain.executable(file(path))
     }
 
+    def LinkerOptionsFixture linkerOptionsFor(String taskName, TestFile projectDir = testDirectory) {
+        return toolChain.linkerOptionsFor(projectDir.file("build/tmp/$taskName/options.txt"))
+    }
+
     def TestFile objectFile(Object path) {
         return toolChain.objectFile(file(path))
     }
@@ -71,15 +77,19 @@ allprojects { p ->
         return toolChain.resourceOnlyLibrary(file(path))
     }
 
-    def objectFileFor(TestFile sourceFile, String rootObjectFilesDir = "build/objs/main/main${sourceType}") {
-        File objectFile = new CompilerOutputFileNamingScheme()
+    def objectFileFor(File sourceFile, String rootObjectFilesDir = "build/objs/main/main${sourceType}") {
+        File objectFile = new CompilerOutputFileNamingSchemeFactory(new BaseDirFileResolver(TestFiles.fileSystem(), testDirectory, TestFiles.getPatternSetFactory())).create()
                         .withObjectFileNameSuffix(OperatingSystem.current().isWindows() ? ".obj" : ".o")
                         .withOutputBaseFolder(file(rootObjectFilesDir))
-                        .map(sourceFile)
-        return file(getTestDirectory().toURI().relativize(objectFile.toURI()));
+                        .map(file(sourceFile))
+        return file(getTestDirectory().toURI().relativize(objectFile.toURI()))
     }
 
-    String hashFor(File inputFile){
-        HashUtil.createCompactMD5(inputFile.getAbsolutePath());
+    protected void maybeWait() {
+        if (toolChain.visualCpp) {
+            def now = new TrueTimeProvider().getCurrentTime()
+            def nextSecond = now % 1000
+            Thread.sleep(1200 - nextSecond)
+        }
     }
 }

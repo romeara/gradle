@@ -17,27 +17,36 @@ package org.gradle.api.tasks;
 
 import groovy.lang.Closure;
 import org.gradle.api.Action;
+import org.gradle.api.GradleException;
+import org.gradle.api.Task;
+import org.gradle.api.Transformer;
 import org.gradle.api.file.CopySpec;
 import org.gradle.api.file.DuplicatesStrategy;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileCopyDetails;
+import org.gradle.api.file.FileTree;
 import org.gradle.api.file.FileTreeElement;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.ConventionTask;
 import org.gradle.api.internal.file.FileLookup;
 import org.gradle.api.internal.file.FileResolver;
+import org.gradle.api.internal.file.copy.ClosureBackedTransformer;
 import org.gradle.api.internal.file.copy.CopyAction;
 import org.gradle.api.internal.file.copy.CopyActionExecuter;
 import org.gradle.api.internal.file.copy.CopySpecInternal;
+import org.gradle.api.internal.file.copy.CopySpecResolver;
 import org.gradle.api.internal.file.copy.CopySpecSource;
 import org.gradle.api.internal.file.copy.DefaultCopySpec;
 import org.gradle.api.specs.Spec;
 import org.gradle.internal.nativeplatform.filesystem.FileSystem;
 import org.gradle.internal.reflect.Instantiator;
+import org.gradle.util.DeprecationLogger;
 
 import javax.inject.Inject;
 import java.io.FilterReader;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
 /**
@@ -45,11 +54,93 @@ import java.util.regex.Pattern;
  */
 public abstract class AbstractCopyTask extends ConventionTask implements CopySpec, CopySpecSource {
 
+    private static final String CONFIGURE_SPEC_DURING_CONFIGURATION = "Consider configuring the spec during configuration time, or using a separate task to do the configuration";
+
     private final CopySpecInternal rootSpec;
     private final CopySpecInternal mainSpec;
 
     protected AbstractCopyTask() {
         this.rootSpec = createRootSpec();
+        rootSpec.addChildSpecListener(new CopySpecInternal.CopySpecListener() {
+            @Override
+            public void childSpecAdded(CopySpecInternal.CopySpecAddress path, final CopySpecInternal spec) {
+                if (getState().getExecuting()) {
+                    if (getOutputs().isCacheEnabled() && getProject().getGradle().getStartParameter().isTaskOutputCacheEnabled()) {
+                        throw new GradleException("It is not allowed to modify child specs of the task at execution time when task output caching is enabled. "
+                            + CONFIGURE_SPEC_DURING_CONFIGURATION + ".");
+                    }
+                    DeprecationLogger.nagUserOfDeprecated(
+                        "Configuring child specs of a copy task at execution time of the task",
+                        CONFIGURE_SPEC_DURING_CONFIGURATION
+                    );
+                    return;
+                }
+
+                StringBuilder specPropertyNameBuilder = new StringBuilder("rootSpec");
+                CopySpecResolver parentResolver = path.unroll(specPropertyNameBuilder);
+                final CopySpecResolver resolver = spec.buildResolverRelativeToParent(parentResolver);
+                String specPropertyName = specPropertyNameBuilder.toString();
+
+                getInputs().files(new Callable<FileTree>() {
+                    @Override
+                    public FileTree call() throws Exception {
+                        return resolver.getSource();
+                    }
+                })
+                    .withPropertyName(specPropertyName)
+                    .withPathSensitivity(PathSensitivity.RELATIVE)
+                    .skipWhenEmpty();
+
+                getInputs().property(specPropertyName + ".destPath", new Callable<String>() {
+                    @Override
+                    public String call() throws Exception {
+                        return resolver.getDestPath().getPathString();
+                    }
+                });
+                getInputs().property(specPropertyName + ".caseSensitive", new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return spec.isCaseSensitive();
+                    }
+                });
+                getInputs().property(specPropertyName + ".includeEmptyDirs", new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return spec.getIncludeEmptyDirs();
+                    }
+                });
+                getInputs().property(specPropertyName + ".duplicatesStrategy", new Callable<DuplicatesStrategy>() {
+                    @Override
+                    public DuplicatesStrategy call() throws Exception {
+                        return spec.getDuplicatesStrategy();
+                    }
+                });
+                getInputs().property(specPropertyName + ".dirMode", new Callable<Integer>() {
+                    @Override
+                    public Integer call() throws Exception {
+                        return spec.getDirMode();
+                    }
+                });
+                getInputs().property(specPropertyName + ".fileMode", new Callable<Integer>() {
+                    @Override
+                    public Integer call() throws Exception {
+                        return spec.getFileMode();
+                    }
+                });
+                getInputs().property(specPropertyName + ".filteringCharset", new Callable<String>() {
+                    @Override
+                    public String call() throws Exception {
+                        return spec.getFilteringCharset();
+                    }
+                });
+            }
+        });
+        this.getOutputs().doNotCacheIf(new Spec<Task>() {
+            @Override
+            public boolean isSatisfiedBy(Task task) {
+                return rootSpec.hasCustomActions();
+            }
+        });
         this.mainSpec = rootSpec.addChild();
     }
 
@@ -96,7 +187,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
      * Returns the source files for this task.
      * @return The source files. Never returns null.
      */
-    @InputFiles @SkipWhenEmpty @Optional
+    @Internal
     public FileCollection getSource() {
         return rootSpec.buildRootResolver().getAllSource();
     }
@@ -118,7 +209,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Input
+    @Internal
     public boolean isCaseSensitive() {
         return getMainSpec().isCaseSensitive();
     }
@@ -133,7 +224,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Input
+    @Internal
     public boolean getIncludeEmptyDirs() {
         return getMainSpec().getIncludeEmptyDirs();
     }
@@ -155,7 +246,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Input
+    @Internal
     public DuplicatesStrategy getDuplicatesStrategy() {
         return getRootSpec().getDuplicatesStrategy();
     }
@@ -179,6 +270,14 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
+    public AbstractCopyTask filesMatching(Iterable<String> patterns, Action<? super FileCopyDetails> action) {
+        getMainSpec().filesMatching(patterns, action);
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public AbstractCopyTask filesNotMatching(String pattern, Action<? super FileCopyDetails> action) {
         getMainSpec().filesNotMatching(pattern, action);
         return this;
@@ -187,8 +286,24 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    public AbstractCopyTask from(Object sourcePath, Closure c) {
-        getMainSpec().from(sourcePath, c);
+    public AbstractCopyTask filesNotMatching(Iterable<String> patterns, Action<? super FileCopyDetails> action) {
+        getMainSpec().filesNotMatching(patterns, action);
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public AbstractCopyTask from(Object sourcePath, final Closure c) {
+        getMainSpec().from(sourcePath, new ClosureBackedAction<CopySpec>(c));
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public AbstractCopyTask from(Object sourcePath, Action<? super CopySpec> configureAction) {
+        getMainSpec().from(sourcePath, configureAction);
         return this;
     }
 
@@ -213,6 +328,14 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
      */
     public AbstractCopyTask into(Object destPath, Closure configureClosure) {
         getMainSpec().into(destPath, configureClosure);
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public CopySpec into(Object destPath, Action<? super CopySpec> copySpec) {
+        getMainSpec().into(destPath, copySpec);
         return this;
     }
 
@@ -315,8 +438,16 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    public AbstractCopyTask rename(Closure closure) {
-        getMainSpec().rename(closure);
+    public AbstractCopyTask rename(final Closure closure) {
+        return rename(new ClosureBackedTransformer(closure));
+    }
+
+    /**
+     * {@inheritDoc}
+     * @param renamer
+     */
+    public AbstractCopyTask rename(Transformer<String, String> renamer) {
+        getMainSpec().rename(renamer);
         return this;
     }
 
@@ -362,6 +493,15 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
 
     /**
      * {@inheritDoc}
+     * @param transformer
+     */
+    public AbstractCopyTask filter(Transformer<String, String> transformer) {
+        getMainSpec().filter(transformer);
+        return this;
+    }
+
+    /**
+     * {@inheritDoc}
      */
     public AbstractCopyTask expand(Map<String, ?> properties) {
         getMainSpec().expand(properties);
@@ -371,7 +511,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Optional @Input
+    @Internal
     public Integer getDirMode() {
         return getMainSpec().getDirMode();
     }
@@ -379,7 +519,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Optional @Input
+    @Internal
     public Integer getFileMode() {
         return getMainSpec().getFileMode();
     }
@@ -419,7 +559,7 @@ public abstract class AbstractCopyTask extends ConventionTask implements CopySpe
     /**
      * {@inheritDoc}
      */
-    @Input
+    @Internal
     public String getFilteringCharset() {
         return getMainSpec().getFilteringCharset();
     }

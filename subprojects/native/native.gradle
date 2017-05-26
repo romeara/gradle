@@ -8,11 +8,8 @@ dependencies {
     compile project(':baseServices')
     compile libraries.commons_io
     compile libraries.slf4j_api
-    compile libraries.jna
     compile libraries.nativePlatform
-    compile module('org.fusesource.jansi:jansi:1.2.1') {
-        dependency libraries.jna
-    }
+    compile module('org.fusesource.jansi:jansi:1.14')
     compile libraries.guava
     compile libraries.jcip
     testCompile libraries.groovy

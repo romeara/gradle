@@ -18,7 +18,6 @@ package org.gradle.nativeplatform.test.cunit
 import org.gradle.api.reporting.model.ModelReportOutput
 import org.gradle.ide.visualstudio.fixtures.ProjectFile
 import org.gradle.ide.visualstudio.fixtures.SolutionFile
-import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.internal.os.OperatingSystem
 import org.gradle.nativeplatform.fixtures.AbstractInstalledToolChainIntegrationSpec
 import org.gradle.nativeplatform.fixtures.app.CHelloWorldApp
@@ -30,7 +29,7 @@ import spock.lang.Issue
 @Requires(TestPrecondition.CAN_INSTALL_EXECUTABLE)
 class CUnitIntegrationTest extends AbstractInstalledToolChainIntegrationSpec {
 
-    def prebuiltDir = new IntegrationTestBuildContext().getSamplesDir().file("native-binaries/cunit/libs")
+    def prebuiltDir = buildContext.getSamplesDir().file("native-binaries/cunit/libs")
     def prebuiltPath = TextUtil.normaliseFileSeparators(prebuiltDir.path)
     def app = new CHelloWorldApp()
 
@@ -126,7 +125,7 @@ model {
         useConventionalSourceLocations()
         useStandardConfig()
         buildFile << "apply plugin: 'cpp'"
-        file("src/hello/cpp").createDir().file("foo.cpp").text = "class foobar { };"
+        file("src/hello/cpp/foo.cpp").text = "class foobar { };"
 
         when:
         run "check"
@@ -506,6 +505,39 @@ model {
         then:
         notExecuted ":runUnbuildableTestCUnitExe"
         executedAndNotSkipped ":runHelloTestCUnitExe"
+    }
+
+    def "cunit run task is properly wired to binaries check tasks and lifecycle check task"() {
+        given:
+        useStandardConfig()
+        useConventionalSourceLocations()
+        buildFile << '''
+            task customHelloCheck()
+            model {
+                components {
+                    hello {
+                        binaries.all {
+                            checkedBy($.tasks.customHelloCheck)
+                        }
+                    }
+                }
+            }
+        '''.stripIndent()
+
+        when:
+        succeeds 'check'
+        then:
+        executed ':customHelloCheck', ':checkHelloSharedLibrary', ':checkHelloStaticLibrary', ':checkHelloTestCUnitExe', ':runHelloTestCUnitExe'
+
+        when:
+        succeeds 'checkHelloTestCUnitExe'
+        then:
+        executed ':runHelloTestCUnitExe'
+
+        when:
+        succeeds 'checkHelloStaticLibrary'
+        then:
+        executed ':customHelloCheck', ':runHelloTestCUnitExe'
     }
 
     private useConventionalSourceLocations() {

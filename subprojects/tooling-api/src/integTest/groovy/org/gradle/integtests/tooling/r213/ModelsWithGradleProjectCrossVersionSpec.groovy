@@ -13,24 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.gradle.integtests.tooling.r213
-import org.gradle.integtests.tooling.fixture.CompositeToolingApiSpecification
+
+import org.gradle.integtests.fixtures.build.BuildTestFile
+import org.gradle.integtests.fixtures.build.BuildTestFixture
+import org.gradle.integtests.tooling.fixture.TargetGradleVersion
+import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
+import org.gradle.integtests.tooling.fixture.ToolingApiVersion
 import org.gradle.test.fixtures.file.TestFile
 import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.connection.GradleConnection
-import org.gradle.tooling.internal.connection.DefaultBuildIdentifier
-import org.gradle.tooling.internal.connection.DefaultProjectIdentifier
 import org.gradle.tooling.internal.consumer.DefaultGradleConnector
 import org.gradle.tooling.model.GradleProject
 import org.gradle.tooling.model.HasGradleProject
 import org.gradle.tooling.model.eclipse.EclipseProject
 import org.gradle.tooling.model.eclipse.HierarchicalEclipseProject
 import org.gradle.tooling.model.gradle.GradleBuild
+import org.gradle.tooling.model.idea.BasicIdeaProject
 import org.gradle.tooling.model.idea.IdeaProject
 
-class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecification {
+@ToolingApiVersion('>=3.3')
+class ModelsWithGradleProjectCrossVersionSpec extends ToolingApiSpecification {
     static projectScopedModels = [GradleProject, EclipseProject, HierarchicalEclipseProject]
-    static buildScopedModels = [GradleBuild, IdeaProject]
+    static buildScopedModels = [GradleBuild, IdeaProject, BasicIdeaProject]
     TestFile rootSingle
     TestFile rootMulti
 
@@ -44,32 +49,7 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         def gradleBuild = getModelWithProjectConnection(rootMulti, GradleBuild)
 
         then:
-        gradleBuild.buildIdentifier == new DefaultBuildIdentifier(rootMulti)
-    }
-
-    def "GradleConnection provides identified GradleBuild for each build"() {
-        when:
-        def gradleBuilds = withCompositeConnection([rootMulti, rootSingle]) { GradleConnection connection ->
-            def modelBuilder = connection.models(GradleBuild)
-            modelBuilder.get()
-        }.asList()*.model
-
-        then:
-        gradleBuilds.size() == 2
-        gradleBuilds.find { it.buildIdentifier == new DefaultBuildIdentifier(rootSingle) }
-        gradleBuilds.find { it.buildIdentifier == new DefaultBuildIdentifier(rootMulti) }
-    }
-
-    def "GradleConnection provides GradleProjects for single project build"() {
-        when:
-        def gradleProjects = getGradleProjectsWithGradleConnection([rootSingle], modelType)
-
-        then:
-        gradleProjects.size() == 1
-        hasProject(gradleProjects, rootSingle, ':', 'A')
-
-        where:
-        modelType << projectScopedModels
+        gradleBuild.buildIdentifier.rootDir == rootMulti
     }
 
     def "ProjectConnection provides all GradleProjects for root of single project build"() {
@@ -82,20 +62,6 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
 
         where:
         modelType << buildScopedModels
-    }
-
-    def "GradleConnection provides GradleProjects for multi-project build"() {
-        when:
-        def gradleProjects = getGradleProjectsWithGradleConnection([rootMulti], modelType)
-
-        then:
-        gradleProjects.size() == 3
-        hasParentProject(gradleProjects, rootMulti, ':', 'B', [':x', ':y'])
-        hasChildProject(gradleProjects, rootMulti, ':x', 'x', ':')
-        hasChildProject(gradleProjects, rootMulti, ':y', 'y', ':')
-
-        where:
-        modelType << projectScopedModels
     }
 
     def "ProjectConnection provides all GradleProjects for root of multi-project build"() {
@@ -112,6 +78,7 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         modelType << buildScopedModels
     }
 
+    @TargetGradleVersion(">=3.3")
     def "ProjectConnection provides all GradleProjects for subproject of multi-project build"() {
         when:
         def rootDir = rootMulti.file("x")
@@ -119,27 +86,12 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
 
         then:
         gradleProjects.size() == 3
-        hasParentProject(gradleProjects, rootDir, ':', 'B', [':x', ':y'])
-        hasChildProject(gradleProjects, rootDir, ':x', 'x', ':')
-        hasChildProject(gradleProjects, rootDir, ':y', 'y', ':')
-
-        where:
-        modelType << buildScopedModels
-    }
-
-    def "GradleConnection provides GradleProjects for composite build"() {
-        when:
-        def gradleProjects = getGradleProjectsWithGradleConnection([rootMulti, rootSingle], modelType)
-
-        then:
-        gradleProjects.size() == 4
-        hasProject(gradleProjects, rootSingle, ':', 'A')
         hasParentProject(gradleProjects, rootMulti, ':', 'B', [':x', ':y'])
         hasChildProject(gradleProjects, rootMulti, ':x', 'x', ':')
         hasChildProject(gradleProjects, rootMulti, ':y', 'y', ':')
 
         where:
-        modelType << projectScopedModels
+        modelType << buildScopedModels
     }
 
     def "ProjectConnection provides GradleProject for root of single project build"() {
@@ -164,6 +116,7 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         modelType << projectScopedModels
     }
 
+    @TargetGradleVersion(">=3.3")
     def "ProjectConnection provides GradleProject for subproject of multi-project build"() {
         given:
         def rootDir = rootMulti.file("x")
@@ -172,13 +125,13 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         GradleProject project = getGradleProjectWithProjectConnection(rootDir, GradleProject)
 
         then: "Get the GradleProject model for the root project"
-        assertProject(project, rootDir, ':', 'B', null, [':x', ':y'])
+        assertProject(project, rootMulti, ':', 'B', null, [':x', ':y'])
 
         when: "EclipseProject is requested"
         GradleProject projectFromEclipseProject = getGradleProjectWithProjectConnection(rootDir, EclipseProject)
 
         then: "Has a GradleProject model for the subproject"
-        assertProject(projectFromEclipseProject, rootDir, ':x', 'x', ':', [])
+        assertProject(projectFromEclipseProject, rootMulti, ':x', 'x', ':', [])
     }
 
     def "ProjectConnection provides GradleProject for subproject of multi-project build with --no-search-upwards"() {
@@ -221,7 +174,8 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         }
         // Order of children is not guaranteed for Gradle < 2.0
         assert project.children*.path as Set == childPaths as Set
-        assert project.projectIdentifier == new DefaultProjectIdentifier(new DefaultBuildIdentifier(rootDir), path)
+        assert project.projectIdentifier.projectPath == path
+        assert project.projectIdentifier.buildIdentifier.rootDir == rootDir
     }
 
     private GradleProject getGradleProjectWithProjectConnection(TestFile rootDir, Class modelType = GradleProject, boolean searchUpwards = true) {
@@ -248,14 +202,6 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
         throw new IllegalArgumentException("Model type does not provide GradleProject")
     }
 
-    private getGradleProjectsWithGradleConnection(List<TestFile> rootDirs, Class modelType = GradleProject) {
-        def models = withCompositeConnection(rootDirs) { GradleConnection connection ->
-            def modelBuilder = connection.models(modelType)
-            modelBuilder.get()
-        }.asList()*.model
-        return models.collect { toGradleProject(it) }
-    }
-
     private getGradleProjectsWithProjectConnectionUsingBuildModel(TestFile rootDir, Class modelType = GradleProject, boolean searchUpwards = true) {
         GradleConnector connector = connector()
         connector.forProjectDirectory(rootDir.absoluteFile)
@@ -272,5 +218,17 @@ class ModelsWithGradleProjectCrossVersionSpec extends CompositeToolingApiSpecifi
             return model.modules*.gradleProject
         }
         throw new IllegalArgumentException("Model type does not provide GradleProjects")
+    }
+
+    BuildTestFixture getBuildTestFixture() {
+        new BuildTestFixture(temporaryFolder).withBuildInSubDir()
+    }
+
+    def singleProjectBuild(String projectName, @DelegatesTo(BuildTestFile) Closure cl = {}) {
+        buildTestFixture.singleProjectBuild(projectName, cl)
+    }
+
+    def multiProjectBuild(String projectName, List<String> subprojects, @DelegatesTo(BuildTestFile) Closure cl = {}) {
+        buildTestFixture.multiProjectBuild(projectName, subprojects, cl)
     }
 }

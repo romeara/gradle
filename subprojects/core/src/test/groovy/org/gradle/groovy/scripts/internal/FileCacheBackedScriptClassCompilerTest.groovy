@@ -17,8 +17,7 @@ package org.gradle.groovy.scripts.internal
 
 import com.google.common.hash.HashCode
 import org.gradle.api.Action
-import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter
-import org.gradle.api.internal.changedetection.state.FileSnapshot
+import org.gradle.api.internal.hash.FileHasher
 import org.gradle.api.internal.initialization.ClassLoaderIds
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache
 import org.gradle.cache.CacheBuilder
@@ -29,7 +28,6 @@ import org.gradle.groovy.scripts.Script
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.groovy.scripts.Transformer
 import org.gradle.internal.classloader.ClassLoaderHierarchyHasher
-import org.gradle.internal.hash.HashValue
 import org.gradle.internal.logging.progress.ProgressLogger
 import org.gradle.internal.logging.progress.ProgressLoggerFactory
 import org.gradle.internal.resource.TextResource
@@ -48,16 +46,16 @@ class FileCacheBackedScriptClassCompilerTest extends Specification {
     final classLoader = Mock(ClassLoader)
     final Transformer transformer = Mock()
     final CompileOperation<?> operation = Mock()
-    final CachingFileSnapshotter snapshotter = Mock()
+    final FileHasher hasher = Mock()
     final ClassLoaderCache classLoaderCache = Mock()
     final classLoaderHierarchyHasher = Mock(ClassLoaderHierarchyHasher) {
-        getLenientHash(classLoader) >> HashCode.fromLong(9999)
+        getClassLoaderHash(classLoader) >> HashCode.fromLong(9999)
     }
     final File localDir = new File("local-dir")
     final File globalDir = new File("global-dir")
     final File classesDir = new File(globalDir, "classes")
     final File metadataDir = new File(globalDir, "metadata")
-    final FileCacheBackedScriptClassCompiler compiler = new FileCacheBackedScriptClassCompiler(cacheRepository, validator, scriptCompilationHandler, Stub(ProgressLoggerFactory), snapshotter, classLoaderCache, classLoaderHierarchyHasher)
+    final FileCacheBackedScriptClassCompiler compiler = new FileCacheBackedScriptClassCompiler(cacheRepository, validator, scriptCompilationHandler, Stub(ProgressLoggerFactory), hasher, classLoaderCache, classLoaderHierarchyHasher)
     final Action verifier = Stub()
     final CompiledScript compiledScript = Stub() {
         loadClass() >> Script
@@ -86,7 +84,7 @@ class FileCacheBackedScriptClassCompilerTest extends Specification {
 
         then:
         result == Script
-        1 * snapshotter.snapshot(resource) >> Stub(FileSnapshot) { getHash() >> new HashValue("123") }
+        1 * hasher.hash(resource) >> HashCode.fromString("0123")
         1 * cacheRepository.cache({ it =~ "scripts-remapped/ScriptClassName/\\p{XDigit}+/TransformerId\\p{XDigit}+" }) >> localCacheBuilder
         1 * localCacheBuilder.withInitializer(!null) >> { args ->
             initializer = args[0]
@@ -105,13 +103,13 @@ class FileCacheBackedScriptClassCompilerTest extends Specification {
         1 * globalCacheBuilder.withValidator(!null) >> globalCacheBuilder
         1 * globalCacheBuilder.open() >> globalCache
 
-        1 * scriptCompilationHandler.loadFromDir(source, classLoader, new File(localDir, 'classes'), new File(localDir, 'metadata'), operation, Script, classLoaderId) >> compiledScript
+        1 * scriptCompilationHandler.loadFromDir(source, _, classLoader, new File(localDir, 'classes'), new File(localDir, 'metadata'), operation, Script, classLoaderId) >> compiledScript
         0 * scriptCompilationHandler._
     }
 
     def "passes CacheValidator to cache builders"() {
         setup:
-        snapshotter.snapshot(resource) >> Stub(FileSnapshot) { getHash() >> new HashValue("123") }
+        hasher.hash(resource) >> HashCode.fromString("0123")
         cacheRepository.cache({ it =~ "scripts-remapped/ScriptClassName/\\p{XDigit}+/TransformerId\\p{XDigit}+" }) >> localCacheBuilder
         localCacheBuilder.withProperties(!null) >> localCacheBuilder
         localCacheBuilder.withInitializer(!null) >> localCacheBuilder
@@ -138,7 +136,7 @@ class FileCacheBackedScriptClassCompilerTest extends Specification {
 
         then:
         result == Script
-        1 * snapshotter.snapshot(resource) >> Stub(FileSnapshot) { getHash() >> new HashValue("123") }
+        1 * hasher.hash(resource) >> HashCode.fromString("0123")
         1 * cacheRepository.cache({ it =~ "scripts-remapped/ScriptClassName/\\p{XDigit}+/TransformerId\\p{XDigit}+" }) >> localCacheBuilder
         1 * localCacheBuilder.withInitializer(!null) >> { args ->
             initializer = args[0]
@@ -164,7 +162,7 @@ class FileCacheBackedScriptClassCompilerTest extends Specification {
         }
 
         1 * scriptCompilationHandler.compileToDir({ it instanceof RemappingScriptSource }, classLoader, classesDir, metadataDir, operation, Script, verifier)
-        1 * scriptCompilationHandler.loadFromDir(source, classLoader, localClassesDir, localMetadataDir, operation, Script, classLoaderId) >> compiledScript
+        1 * scriptCompilationHandler.loadFromDir(source, _, classLoader, localClassesDir, localMetadataDir, operation, Script, classLoaderId) >> compiledScript
         0 * scriptCompilationHandler._
     }
 

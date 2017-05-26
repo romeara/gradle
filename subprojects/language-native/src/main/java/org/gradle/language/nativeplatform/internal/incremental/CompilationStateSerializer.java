@@ -15,8 +15,17 @@
  */
 package org.gradle.language.nativeplatform.internal.incremental;
 
-import org.gradle.internal.hash.HashValue;
-import org.gradle.internal.serialize.*;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.HashCode;
+import org.gradle.internal.serialize.BaseSerializerFactory;
+import org.gradle.internal.serialize.Decoder;
+import org.gradle.internal.serialize.Encoder;
+import org.gradle.internal.serialize.HashCodeSerializer;
+import org.gradle.internal.serialize.ListSerializer;
+import org.gradle.internal.serialize.MapSerializer;
+import org.gradle.internal.serialize.Serializer;
+import org.gradle.internal.serialize.SetSerializer;
 import org.gradle.language.nativeplatform.internal.Include;
 import org.gradle.language.nativeplatform.internal.IncludeDirectives;
 import org.gradle.language.nativeplatform.internal.IncludeType;
@@ -27,50 +36,41 @@ import java.io.File;
 import java.util.Set;
 
 public class CompilationStateSerializer implements Serializer<CompilationState> {
-
-    private static final int SERIAL_VERSION = 1;
     private final BaseSerializerFactory serializerFactory = new BaseSerializerFactory();
     private final Serializer<File> fileSerializer;
-    private final ListSerializer<File> fileListSerializer;
+    private final SetSerializer<File> fileSetSerializer;
     private final MapSerializer<File, CompilationFileState> stateMapSerializer;
 
     public CompilationStateSerializer() {
         fileSerializer = serializerFactory.getSerializerFor(File.class);
-        fileListSerializer = new ListSerializer<File>(fileSerializer);
+        fileSetSerializer = new SetSerializer<File>(fileSerializer);
         stateMapSerializer = new MapSerializer<File, CompilationFileState>(fileSerializer, new CompilationFileStateSerializer());
     }
 
     @Override
     public CompilationState read(Decoder decoder) throws Exception {
-        CompilationState compilationState = new CompilationState();
-        int version = decoder.readInt();
-        if (version != SERIAL_VERSION) {
-            return compilationState;
-        }
-
-        compilationState.sourceInputs.addAll(fileListSerializer.read(decoder));
-        compilationState.fileStates.putAll(stateMapSerializer.read(decoder));
-        return compilationState;
+        ImmutableSet<File> sourceInputs = ImmutableSet.copyOf(fileSetSerializer.read(decoder));
+        ImmutableMap<File, CompilationFileState> fileStates = ImmutableMap.copyOf(stateMapSerializer.read(decoder));
+        return new CompilationState(sourceInputs, fileStates);
     }
 
     @Override
     public void write(Encoder encoder, CompilationState value) throws Exception {
-        encoder.writeInt(SERIAL_VERSION);
-        fileListSerializer.write(encoder, value.sourceInputs);
-        stateMapSerializer.write(encoder, value.fileStates);
+        fileSetSerializer.write(encoder, value.getSourceInputs());
+        stateMapSerializer.write(encoder, value.getFileStates());
     }
 
     private class CompilationFileStateSerializer implements Serializer<CompilationFileState> {
-        private final Serializer<HashValue> hashSerializer = new HashValueSerializer();
+        private final Serializer<HashCode> hashSerializer = new HashCodeSerializer();
         private final Serializer<Set<ResolvedInclude>> resolveIncludesSerializer = new SetSerializer<ResolvedInclude>(new ResolvedIncludeSerializer());
         private final Serializer<IncludeDirectives> sourceIncludesSerializer = new SourceIncludesSerializer();
 
         @Override
         public CompilationFileState read(Decoder decoder) throws Exception {
-            CompilationFileState fileState = new CompilationFileState(hashSerializer.read(decoder));
-            fileState.setResolvedIncludes(resolveIncludesSerializer.read(decoder));
-            fileState.setIncludeDirectives(sourceIncludesSerializer.read(decoder));
-            return fileState;
+            HashCode hash = hashSerializer.read(decoder);
+            ImmutableSet<ResolvedInclude> resolvedIncludes = ImmutableSet.copyOf(resolveIncludesSerializer.read(decoder));
+            IncludeDirectives includeDirectives = sourceIncludesSerializer.read(decoder);
+            return new CompilationFileState(hash, includeDirectives, resolvedIncludes);
         }
 
         @Override
@@ -110,9 +110,7 @@ public class CompilationStateSerializer implements Serializer<CompilationState> 
 
         @Override
         public IncludeDirectives read(Decoder decoder) throws Exception {
-            DefaultIncludeDirectives sourceIncludes = new DefaultIncludeDirectives();
-            sourceIncludes.addAll(includeListSerializer.read(decoder));
-            return sourceIncludes;
+            return new DefaultIncludeDirectives(includeListSerializer.read(decoder));
         }
 
         @Override

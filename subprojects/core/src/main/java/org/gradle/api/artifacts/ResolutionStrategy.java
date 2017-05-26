@@ -18,6 +18,7 @@ package org.gradle.api.artifacts;
 
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
+import org.gradle.api.artifacts.transform.ArtifactTransform;
 
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +36,9 @@ import java.util.concurrent.TimeUnit;
  *     // fail eagerly on version conflict (includes transitive dependencies)
  *     // e.g. multiple different versions of the same dependency (group and name are equal)
  *     failOnVersionConflict()
+ *
+ *     // prefer modules that are part of this build (multi-project or composite build) over external modules
+ *     preferProjectModules()
  *
  *     // force certain versions of dependencies (including transitive)
  *     //  *append new forced modules:
@@ -78,6 +82,24 @@ public interface ResolutionStrategy {
      * @since 1.0-milestone-6
      */
     ResolutionStrategy failOnVersionConflict();
+
+    /**
+     * Gradle can resolve conflicts purely by version number or prioritize project dependencies over binary.
+     * The default is <b>by version number</b>.<p>
+     * This applies to both first level and transitive dependencies. See example below:
+     *
+     * <pre autoTested=''>
+     * apply plugin: 'java' //so that there are some configurations
+     *
+     * configurations.all {
+     *   resolutionStrategy.preferProjectModules()
+     * }
+     * </pre>
+     *
+     * @since 3.2
+     */
+    @Incubating
+    void preferProjectModules();
 
     /**
      * Allows forcing certain versions of dependencies, including transitive dependencies.
@@ -264,4 +286,16 @@ public interface ResolutionStrategy {
      */
     @Incubating
     ResolutionStrategy dependencySubstitution(Action<? super DependencySubstitutions> action);
+
+    /**
+     * Register an artifact transformation.
+     *
+     * @param type implementation type of the artifact transformation
+     * @param config a configuration action
+     *
+     * @see ArtifactTransform
+     * @since 3.4
+     */
+    @Incubating
+    void registerTransform(Class<? extends ArtifactTransform> type, Action<? super ArtifactTransform> config);
 }

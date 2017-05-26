@@ -16,6 +16,7 @@
 
 package org.gradle.groovy.scripts.internal;
 
+import com.google.common.hash.HashCode;
 import groovy.lang.GroovyClassLoader;
 import groovy.lang.GroovyCodeSource;
 import groovy.lang.GroovyResourceLoader;
@@ -24,7 +25,12 @@ import org.apache.commons.lang.StringUtils;
 import org.codehaus.groovy.ast.ClassNode;
 import org.codehaus.groovy.ast.stmt.Statement;
 import org.codehaus.groovy.classgen.Verifier;
-import org.codehaus.groovy.control.*;
+import org.codehaus.groovy.control.CompilationFailedException;
+import org.codehaus.groovy.control.CompilationUnit;
+import org.codehaus.groovy.control.CompilerConfiguration;
+import org.codehaus.groovy.control.MultipleCompilationErrorsException;
+import org.codehaus.groovy.control.Phases;
+import org.codehaus.groovy.control.SourceUnit;
 import org.codehaus.groovy.control.messages.SyntaxErrorMessage;
 import org.codehaus.groovy.syntax.SyntaxException;
 import org.gradle.api.Action;
@@ -36,11 +42,13 @@ import org.gradle.groovy.scripts.ScriptCompilationException;
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.groovy.scripts.Transformer;
 import org.gradle.internal.UncheckedException;
+import org.gradle.internal.classloader.ClassLoaderUtils;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.serialize.Serializer;
 import org.gradle.internal.serialize.kryo.KryoBackedDecoder;
 import org.gradle.internal.serialize.kryo.KryoBackedEncoder;
-import org.gradle.util.Clock;
+import org.gradle.internal.time.Timer;
+import org.gradle.internal.time.Timers;
 import org.gradle.util.GFileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +69,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
     private static final String METADATA_FILE_NAME = "metadata.bin";
     private static final int EMPTY_FLAG = 1;
     private static final int HAS_METHODS_FLAG = 2;
+
     private final ClassLoaderCache classLoaderCache;
     private final String[] defaultImportPackages;
     private final Map<String, List<String>> simpleNameToFQN;
@@ -74,7 +83,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
     @Override
     public void compileToDir(ScriptSource source, ClassLoader classLoader, File classesDir, File metadataDir, CompileOperation<?> extractingTransformer,
                              Class<? extends Script> scriptBaseClass, Action<? super ClassNode> verifier) {
-        Clock clock = new Clock();
+        Timer clock = Timers.startTimer();
         GFileUtils.deleteDirectory(classesDir);
         GFileUtils.mkdirs(classesDir);
         CompilerConfiguration configuration = createBaseCompilerConfiguration(scriptBaseClass);
@@ -87,7 +96,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
             throw e;
         }
 
-        logger.debug("Timing: Writing script to cache at {} took: {}", classesDir.getAbsolutePath(), clock.getTime());
+        logger.debug("Timing: Writing script to cache at {} took: {}", classesDir.getAbsolutePath(), clock.getElapsed());
     }
 
     private void compileScript(final ScriptSource source, ClassLoader classLoader, CompilerConfiguration configuration, File metadataDir,
@@ -119,18 +128,22 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
         String scriptName = source.getClassName();
         GroovyCodeSource codeSource = new GroovyCodeSource(scriptText == null ? "" : scriptText, scriptName, "/groovy/script");
         try {
-            groovyClassLoader.parseClass(codeSource, false);
-        } catch (MultipleCompilationErrorsException e) {
-            wrapCompilationFailure(source, e);
-        } catch (CompilationFailedException e) {
-            throw new GradleException(String.format("Could not compile %s.", source.getDisplayName()), e);
-        }
+            try {
+                groovyClassLoader.parseClass(codeSource, false);
+            } catch (MultipleCompilationErrorsException e) {
+                wrapCompilationFailure(source, e);
+            } catch (CompilationFailedException e) {
+                throw new GradleException(String.format("Could not compile %s.", source.getDisplayName()), e);
+            }
 
-        if (packageDetector.hasPackageStatement) {
-            throw new UnsupportedOperationException(String.format("%s should not contain a package statement.",
-                StringUtils.capitalize(source.getDisplayName())));
+            if (packageDetector.hasPackageStatement) {
+                throw new UnsupportedOperationException(String.format("%s should not contain a package statement.",
+                    StringUtils.capitalize(source.getDisplayName())));
+            }
+            serializeMetadata(source, extractingTransformer, metadataDir, emptyScriptDetector.isEmptyScript(), emptyScriptDetector.getHasMethods());
+        } finally {
+            ClassLoaderUtils.tryClose(groovyClassLoader);
         }
-        serializeMetadata(source, extractingTransformer, metadataDir, emptyScriptDetector.isEmptyScript(), emptyScriptDetector.getHasMethods());
     }
 
     private <M> void serializeMetadata(ScriptSource scriptSource, CompileOperation<M> extractingTransformer, File metadataDir, boolean emptyScript, boolean hasMethods) {
@@ -182,7 +195,8 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
         return configuration;
     }
 
-    public <T extends Script, M> CompiledScript<T, M> loadFromDir(ScriptSource source, ClassLoader classLoader, File scriptCacheDir,
+    @Override
+    public <T extends Script, M> CompiledScript<T, M> loadFromDir(ScriptSource source, HashCode sourceHashCode, ClassLoader classLoader, File scriptCacheDir,
                                                                   File metadataCacheDir, CompileOperation<M> transformer, Class<T> scriptBaseClass,
                                                                   ClassLoaderId classLoaderId) {
         File metadataFile = new File(metadataCacheDir, METADATA_FILE_NAME);
@@ -201,7 +215,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
                 } else {
                     data = null;
                 }
-                return new ClassesDirCompiledScript<T, M>(isEmpty, hasMethods, classLoaderId, scriptBaseClass, scriptCacheDir, classLoader, source, data);
+                return new ClassesDirCompiledScript<T, M>(isEmpty, hasMethods, classLoaderId, scriptBaseClass, scriptCacheDir, classLoader, source, sourceHashCode, data);
             } finally {
                 decoder.close();
             }
@@ -282,10 +296,11 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
         private final File scriptCacheDir;
         private final ClassLoader classLoader;
         private final ScriptSource source;
+        private final HashCode sourceHashCode;
         private final M metadata;
         private Class<? extends T> scriptClass;
 
-        public ClassesDirCompiledScript(boolean isEmpty, boolean hasMethods, ClassLoaderId classLoaderId, Class<T> scriptBaseClass, File scriptCacheDir, ClassLoader classLoader, ScriptSource source, M metadata) {
+        public ClassesDirCompiledScript(boolean isEmpty, boolean hasMethods, ClassLoaderId classLoaderId, Class<T> scriptBaseClass, File scriptCacheDir, ClassLoader classLoader, ScriptSource source, HashCode sourceHashCode, M metadata) {
             this.isEmpty = isEmpty;
             this.hasMethods = hasMethods;
             this.classLoaderId = classLoaderId;
@@ -293,6 +308,7 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
             this.scriptCacheDir = scriptCacheDir;
             this.classLoader = classLoader;
             this.source = source;
+            this.sourceHashCode = sourceHashCode;
             this.metadata = metadata;
         }
 
@@ -318,7 +334,8 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
                     throw new UnsupportedOperationException("Cannot load script that does nothing.");
                 }
                 try {
-                    ClassLoader loader = classLoaderCache.get(classLoaderId, new DefaultClassPath(scriptCacheDir), classLoader, null);
+                    // Classloader scope will be handled by the cache, class will be released when the classloader is.
+                    ClassLoader loader = classLoaderCache.get(classLoaderId, new DefaultClassPath(scriptCacheDir), classLoader, null, sourceHashCode);
                     scriptClass = loader.loadClass(source.getClassName()).asSubclass(scriptBaseClass);
                 } catch (Exception e) {
                     File expectedClassFile = new File(scriptCacheDir, source.getClassName() + ".class");
@@ -330,7 +347,5 @@ public class DefaultScriptCompilationHandler implements ScriptCompilationHandler
             }
             return scriptClass;
         }
-
     }
-
 }

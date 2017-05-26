@@ -30,6 +30,8 @@ import org.gradle.api.publication.maven.internal.VersionRangeMapper;
 
 import java.util.*;
 
+import static com.google.common.base.Strings.emptyToNull;
+
 class DefaultPomDependenciesConverter implements PomDependenciesConverter {
     private static final List<Exclusion> EXCLUDE_ALL = initExcludeAll();
     private ExcludeRuleConverter excludeRuleConverter;
@@ -111,6 +113,15 @@ class DefaultPomDependenciesConverter implements PomDependenciesConverter {
         addMavenDependencies(dependenciesPriorityMap, dependency, dependency.getName(), null, scope, null, priority, configurations);
     }
 
+    private static Configuration getTargetConfiguration(ProjectDependency dependency) {
+        // todo CC: check that it ok to do this if configurations have attributes
+        String targetConfiguration = dependency.getTargetConfiguration();
+        if (targetConfiguration == null) {
+            targetConfiguration = org.gradle.api.artifacts.Dependency.DEFAULT_CONFIGURATION;
+        }
+        return dependency.getDependencyProject().getConfigurations().getByName(targetConfiguration);
+    }
+
     private void addMavenDependencies(Map<Dependency, Integer> dependenciesWithPriorities,
                                       ModuleDependency dependency, String name, String type, String scope, String classifier, Integer priority,
                                       Set<Configuration> configurations) {
@@ -120,7 +131,7 @@ class DefaultPomDependenciesConverter implements PomDependenciesConverter {
             ProjectDependency projectDependency = (ProjectDependency) dependency;
             final String artifactId = determineProjectDependencyArtifactId((ProjectDependency) dependency);
 
-            Configuration dependencyConfig = projectDependency.getProjectConfiguration();
+            Configuration dependencyConfig = getTargetConfiguration(projectDependency);
             for (PublishArtifact artifactToPublish : dependencyConfig.getAllArtifacts()) {
                 Dependency mavenDependency = new Dependency();
                 mavenDependency.setArtifactId(artifactId);
@@ -150,23 +161,41 @@ class DefaultPomDependenciesConverter implements PomDependenciesConverter {
             } else {
                 // Use highest version on highest scope, keep highest scope exclusions only
                 int duplicatePriority = dependenciesWithPriorities.get(duplicateDependency.get());
-                ArtifactVersion mavenVersion = new DefaultArtifactVersion(mavenDependency.getVersion());
-                ArtifactVersion duplicateVersion = new DefaultArtifactVersion(duplicateDependency.get().getVersion());
+                boolean samePriority = priority == duplicatePriority;
                 boolean higherPriority = priority > duplicatePriority;
-                boolean higherVersion = mavenVersion.compareTo(duplicateVersion) > 0;
+                boolean higherVersion = compareMavenVersionStrings(mavenDependency.getVersion(), duplicateDependency.get().getVersion()) > 0;
                 if (higherPriority || higherVersion) {
                     // Replace if higher priority or version with highest priority and version
                     dependenciesWithPriorities.remove(duplicateDependency.get());
-                    if(!higherPriority) {
+                    if (!higherPriority) {
                         // Lower or equal priority but higher version, keep higher scope and exclusions
                         mavenDependency.setScope(duplicateDependency.get().getScope());
-                        mavenDependency.setExclusions(duplicateDependency.get().getExclusions());
+                        if (!samePriority) {
+                            mavenDependency.setExclusions(duplicateDependency.get().getExclusions());
+                        }
                     }
                     int highestPriority = higherPriority ? priority : duplicatePriority;
                     dependenciesWithPriorities.put(mavenDependency, highestPriority);
                 }
             }
         }
+    }
+
+    private int compareMavenVersionStrings(String dependencyVersionString, String duplicateVersionString) {
+        String dependencyVersion = emptyToNull(dependencyVersionString);
+        String duplicateVersion = emptyToNull(duplicateVersionString);
+        if (dependencyVersion == null && duplicateVersion == null) {
+            return 0;
+        }
+        if (dependencyVersion == null) {
+            return -1;
+        }
+        if (duplicateVersion == null) {
+            return 1;
+        }
+        ArtifactVersion dependencyArtifactVersion = new DefaultArtifactVersion(dependencyVersion);
+        ArtifactVersion duplicateArtifactVersion = new DefaultArtifactVersion(duplicateVersion);
+        return dependencyArtifactVersion.compareTo(duplicateArtifactVersion);
     }
 
     private Optional<Dependency> findEqualIgnoreScopeVersionAndExclusions(Collection<Dependency> dependencies, Dependency candidate) {

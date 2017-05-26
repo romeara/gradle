@@ -23,7 +23,7 @@ public enum ChangeType {
 
     private final String description;
 
-    private ChangeType(String description) {
+    ChangeType(String description) {
         this.description = description;
     }
 

@@ -17,25 +17,53 @@ package org.gradle.internal.component.external.model;
 
 import org.gradle.api.Nullable;
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
+import org.gradle.internal.component.external.descriptor.Configuration;
 import org.gradle.internal.component.external.descriptor.ModuleDescriptorState;
 import org.gradle.internal.component.model.ComponentResolveMetadata;
 import org.gradle.internal.component.model.ModuleSource;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * The meta-data for a module version that is required during dependency resolution.
  */
 public interface ModuleComponentResolveMetadata extends ComponentResolveMetadata {
+    /**
+     * {@inheritDoc}
+     */
     ModuleComponentIdentifier getComponentId();
 
+    /**
+     * {@inheritDoc}
+     */
     ModuleComponentResolveMetadata withSource(ModuleSource source);
 
-    ModuleComponentArtifactMetadata artifact(String type, @Nullable String extension, @Nullable String classifier);
+    /**
+     * Creates a mutable copy of this metadata.
+     *
+     * Note that this method can be expensive. Often it is more efficient to use a more specialised mutation method such as {@link #withSource(ModuleSource)} rather than this method.
+     */
+    MutableModuleComponentResolveMetadata asMutable();
 
     /**
-     * Returns this module version as an Ivy ModuleDescriptor. This method is here to allow us to migrate away from the Ivy types
+     * Creates an artifact for this module. Does not mutate this metadata.
+     */
+    ModuleComponentArtifactMetadata artifact(String type, @Nullable String extension, @Nullable String classifier);
+
+    @Nullable
+    List<ModuleComponentArtifactMetadata> getArtifacts();
+
+    /**
+     * Returns this module version as an Ivy-like ModuleDescriptor. This method is here to allow us to migrate away from the Ivy types
      * and will be removed.
      *
      * <p>You should avoid using this method.
      */
     ModuleDescriptorState getDescriptor();
+
+    /**
+     * Returns the Ivy-like definitions for the configurations of this module. This method is here to allow us to migrate away from the Ivy model and will be removed.
+     */
+    Map<String, Configuration> getConfigurationDefinitions();
 }

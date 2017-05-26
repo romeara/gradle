@@ -15,23 +15,25 @@
  */
 package org.gradle.language.nativeplatform.internal.incremental;
 
-import org.gradle.internal.hash.HashValue;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.HashCode;
 import org.gradle.language.nativeplatform.internal.IncludeDirectives;
-import org.gradle.language.nativeplatform.internal.incremental.sourceparser.DefaultIncludeDirectives;
 
-import java.util.HashSet;
-import java.util.Set;
-
+/**
+ * Immutable snapshot of the state of a source or header file.
+ */
 public class CompilationFileState {
-    private HashValue hash;
-    private IncludeDirectives includeDirectives = new DefaultIncludeDirectives();
-    private Set<ResolvedInclude> resolvedIncludes = new HashSet<ResolvedInclude>();
+    private final HashCode hash;
+    private final IncludeDirectives includeDirectives;
+    private final ImmutableSet<ResolvedInclude> resolvedIncludes;
 
-    public CompilationFileState(HashValue hash) {
+    public CompilationFileState(HashCode hash, IncludeDirectives includeDirectives, ImmutableSet<ResolvedInclude> resolvedIncludes) {
         this.hash = hash;
+        this.includeDirectives = includeDirectives;
+        this.resolvedIncludes = resolvedIncludes;
     }
 
-    public HashValue getHash() {
+    public HashCode getHash() {
         return hash;
     }
 
@@ -39,15 +41,7 @@ public class CompilationFileState {
         return includeDirectives;
     }
 
-    public void setIncludeDirectives(IncludeDirectives includeDirectives) {
-        this.includeDirectives = includeDirectives;
-    }
-
-    public Set<ResolvedInclude> getResolvedIncludes() {
+    public ImmutableSet<ResolvedInclude> getResolvedIncludes() {
         return resolvedIncludes;
-    }
-
-    public void setResolvedIncludes(Set<ResolvedInclude> resolvedIncludes) {
-        this.resolvedIncludes = resolvedIncludes;
     }
 }

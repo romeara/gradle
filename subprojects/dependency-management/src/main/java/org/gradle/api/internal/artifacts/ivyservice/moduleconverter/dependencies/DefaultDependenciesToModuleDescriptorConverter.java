@@ -15,12 +15,18 @@
  */
 package org.gradle.api.internal.artifacts.ivyservice.moduleconverter.dependencies;
 
-import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.Nullable;
+import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ExcludeRule;
+import org.gradle.api.artifacts.FileCollectionDependency;
 import org.gradle.api.artifacts.ModuleDependency;
+import org.gradle.api.artifacts.component.ComponentIdentifier;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
+import org.gradle.api.internal.artifacts.dependencies.SelfResolvingDependencyInternal;
+import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.internal.component.local.model.BuildableLocalComponentMetadata;
-
-import java.util.Collection;
+import org.gradle.internal.component.local.model.LocalFileDependencyMetadata;
 
 public class DefaultDependenciesToModuleDescriptorConverter implements DependenciesToModuleDescriptorConverter {
     private DependencyDescriptorFactory dependencyDescriptorFactory;
@@ -32,24 +38,53 @@ public class DefaultDependenciesToModuleDescriptorConverter implements Dependenc
         this.excludeRuleConverter = excludeRuleConverter;
     }
 
-    public void addDependencyDescriptors(BuildableLocalComponentMetadata metaData, Collection<? extends Configuration> configurations) {
-        addDependencies(metaData, configurations);
-        addExcludeRules(metaData, configurations);
+    @Override
+    public void addDependencyDescriptors(BuildableLocalComponentMetadata metaData, ConfigurationInternal configuration) {
+        addDependencies(metaData, configuration);
+        addExcludeRules(metaData, configuration);
     }
 
-    private void addDependencies(BuildableLocalComponentMetadata metaData, Collection<? extends Configuration> configurations) {
-        for (Configuration configuration : configurations) {
-            for (ModuleDependency dependency : configuration.getDependencies().withType(ModuleDependency.class)) {
-                metaData.addDependency(dependencyDescriptorFactory.createDependencyDescriptor(configuration.getName(), dependency));
+    private void addDependencies(BuildableLocalComponentMetadata metaData, ConfigurationInternal configuration) {
+        AttributeContainerInternal attributes = configuration.getAttributes().asImmutable();
+        for (Dependency dependency : configuration.getDependencies()) {
+            if (dependency instanceof ModuleDependency) {
+                ModuleDependency moduleDependency = (ModuleDependency) dependency;
+                metaData.addDependency(dependencyDescriptorFactory.createDependencyDescriptor(configuration.getName(), attributes, moduleDependency));
+            } else if (dependency instanceof FileCollectionDependency) {
+                final FileCollectionDependency fileDependency = (FileCollectionDependency) dependency;
+                metaData.addFiles(configuration.getName(), new DefaultLocalFileDependencyMetadata(fileDependency));
+            } else {
+                throw new IllegalArgumentException("Cannot convert dependency " + dependency + " to local component dependency metadata.");
             }
         }
     }
 
-    private void addExcludeRules(BuildableLocalComponentMetadata metaData, Collection<? extends Configuration> configurations) {
-        for (Configuration configuration : configurations) {
-            for (ExcludeRule excludeRule : configuration.getExcludeRules()) {
-                metaData.addExclude(excludeRuleConverter.convertExcludeRule(configuration.getName(), excludeRule));
-            }
+    private void addExcludeRules(BuildableLocalComponentMetadata metaData, ConfigurationInternal configuration) {
+        for (ExcludeRule excludeRule : configuration.getExcludeRules()) {
+            metaData.addExclude(excludeRuleConverter.convertExcludeRule(configuration.getName(), excludeRule));
+        }
+    }
+
+    private static class DefaultLocalFileDependencyMetadata implements LocalFileDependencyMetadata {
+        private final FileCollectionDependency fileDependency;
+
+        DefaultLocalFileDependencyMetadata(FileCollectionDependency fileDependency) {
+            this.fileDependency = fileDependency;
+        }
+
+        @Override
+        public FileCollectionDependency getSource() {
+            return fileDependency;
+        }
+
+        @Override @Nullable
+        public ComponentIdentifier getComponentId() {
+            return ((SelfResolvingDependencyInternal) fileDependency).getTargetComponentId();
+        }
+
+        @Override
+        public FileCollection getFiles() {
+            return fileDependency.getFiles();
         }
     }
 }

@@ -21,15 +21,12 @@ import org.gradle.integtests.fixtures.Sample
 import org.gradle.integtests.fixtures.UsesSample
 import org.gradle.integtests.fixtures.executer.ExecutionResult
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
-import org.gradle.integtests.fixtures.executer.IntegrationTestBuildContext
 import org.gradle.util.TextUtil
 import org.junit.Rule
 
 class SamplesToolingApiIntegrationTest extends AbstractIntegrationSpec {
 
     @Rule public final Sample sample = new Sample(temporaryFolder)
-
-    private IntegrationTestBuildContext buildContext
 
     @UsesSample('toolingApi/eclipse')
     def "can use tooling API to build Eclipse model"() {
@@ -93,43 +90,12 @@ class SamplesToolingApiIntegrationTest extends AbstractIntegrationSpec {
         noExceptionThrown()
     }
 
-    @UsesSample('toolingApi/composite-models')
-    def "can use tooling API to compose independent projects"() {
-        tweakProject()
-
-        when:
-        def result = run()
-
-        then:
-        result.assertOutputContains("Project: project1::")
-        result.assertOutputContains("Project: project1::a")
-        result.assertOutputContains("Project: project1::b")
-        result.assertOutputContains("Project: project1::c")
-        result.assertOutputContains("Project: project2::")
-        result.assertOutputContains("Project: project3::")
-        result.assertOutputContains("Project: project3::a")
-        result.assertOutputContains("Project: project3::b")
-    }
-
-    @UsesSample('toolingApi/composite-tasks')
-    def "can use tooling API to compose independent projects and run tasks"() {
-        tweakProject()
-
-        when:
-        def result = run()
-
-        then:
-        result.assertOutputContains(":a:build")
-        result.assertOutputContains(":b:build")
-    }
-
     private void tweakProject(File projectDir = sample.dir) {
         // Inject some additional configuration into the sample build script
         def buildFile = projectDir.file('build.gradle')
         def buildScript = buildFile.text
         def index = buildScript.indexOf('repositories {')
         assert index >= 0
-        buildContext = new IntegrationTestBuildContext()
         buildScript = buildScript.substring(0, index) + """
 repositories {
     maven { url "${buildContext.libsRepo.toURI()}" }
@@ -153,7 +119,6 @@ run {
         def buildScript = buildFile.text
         def index = buildScript.indexOf('publishing {')
         assert index >= 0
-        buildContext = new IntegrationTestBuildContext()
         buildScript = buildScript.substring(0, index) + """
 repositories {
     maven { url "${buildContext.libsRepo.toURI()}" }
@@ -168,7 +133,7 @@ repositories {
 
     private ExecutionResult run(String task = 'run', File dir = sample.dir) {
         try {
-            return new GradleContextualExecuter(distribution, temporaryFolder)
+            return new GradleContextualExecuter(distribution, temporaryFolder, getBuildContext())
                     .requireGradleDistribution()
                     .inDirectory(dir)
                     .withTasks(task)

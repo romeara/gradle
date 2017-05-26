@@ -23,10 +23,14 @@ import org.gradle.api.internal.initialization.ClassLoaderScope;
 import org.gradle.api.internal.project.ProjectRegistry;
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.initialization.DefaultProjectDescriptor;
+import org.gradle.api.initialization.IncludedBuild;
+
+import java.io.File;
+import java.util.Map;
 
 public interface SettingsInternal extends Settings {
     /**
-     * Returns the scope containing classes that should be visible to all settings and build scripts invoked by this build.
+     * Returns the scope containing classes that should be visible to all settings scripts and build scripts invoked by this build.
      */
     ClassLoaderScope getRootClassLoaderScope();
 
@@ -44,4 +48,6 @@ public interface SettingsInternal extends Settings {
     ProjectDescriptor getDefaultProject();
 
     void setDefaultProject(ProjectDescriptor defaultProject);
+
+    Map<File, IncludedBuild> getIncludedBuilds();
 }

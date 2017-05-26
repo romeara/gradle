@@ -17,10 +17,14 @@
 package org.gradle.tooling.internal.consumer.connection;
 
 import org.gradle.tooling.BuildAction;
+import org.gradle.tooling.BuildController;
 import org.gradle.tooling.internal.adapter.ProtocolToModelAdapter;
+import org.gradle.tooling.internal.consumer.converters.ConsumerTargetTypeProvider;
 import org.gradle.tooling.internal.consumer.versioning.ModelMapping;
+import org.gradle.tooling.internal.consumer.versioning.VersionDetails;
 import org.gradle.tooling.internal.protocol.InternalBuildAction;
 import org.gradle.tooling.internal.protocol.InternalBuildController;
+import org.gradle.tooling.model.gradle.BuildInvocations;
 
 import java.io.File;
 
@@ -31,16 +35,21 @@ import java.io.File;
  */
 public class InternalBuildActionAdapter<T> implements InternalBuildAction<T> {
     private final BuildAction<T> action;
-    private final ProtocolToModelAdapter adapter;
     private final File rootDir;
+    private final VersionDetails versionDetails;
 
-    public InternalBuildActionAdapter(BuildAction<T> action, ProtocolToModelAdapter adapter, File rootDir) {
+    public InternalBuildActionAdapter(BuildAction<T> action, File rootDir, VersionDetails versionDetails) {
         this.action = action;
-        this.adapter = adapter;
         this.rootDir = rootDir;
+        this.versionDetails = versionDetails;
     }
 
     public T execute(final InternalBuildController buildController) {
-        return action.execute(new BuildControllerAdapter(adapter, buildController, new ModelMapping(), rootDir));
+        ProtocolToModelAdapter protocolToModelAdapter = new ProtocolToModelAdapter(new ConsumerTargetTypeProvider());
+        BuildController buildControllerAdapter = new BuildControllerAdapter(protocolToModelAdapter, buildController, new ModelMapping(), rootDir);
+        if (!versionDetails.maySupportModel(BuildInvocations.class)) {
+            buildControllerAdapter= new BuildInvocationsAdapterController(protocolToModelAdapter, buildControllerAdapter);
+        }
+        return action.execute(buildControllerAdapter);
     }
 }

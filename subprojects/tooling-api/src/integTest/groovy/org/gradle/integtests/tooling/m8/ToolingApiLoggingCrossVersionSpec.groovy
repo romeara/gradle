@@ -18,16 +18,18 @@ package org.gradle.integtests.tooling.m8
 
 import org.gradle.integtests.fixtures.executer.ExecutionResult
 import org.gradle.integtests.tooling.fixture.ToolingApiLoggingSpecification
+import org.gradle.integtests.tooling.fixture.ToolingApiVersion
 import org.junit.Assume
 
+@ToolingApiVersion(">=2.2")
 class ToolingApiLoggingCrossVersionSpec extends ToolingApiLoggingSpecification {
 
     def setup() {
-        reset()
+        toolingApi.requireIsolatedToolingApi()
     }
 
     def cleanup() {
-        reset()
+        toolingApi.close()
     }
 
     def "client receives same stdout and stderr when in verbose mode as if running from the command-line in debug mode"() {
@@ -109,7 +111,7 @@ project.logger.debug("debug logging");
     }
 
     private ExecutionResult runUsingCommandLine() {
-        targetDist.executer(temporaryFolder)
+        targetDist.executer(temporaryFolder, getBuildContext())
             .requireGradleDistribution()
             .withArgument("--no-daemon") //suppress daemon usage suggestions
             .withBuildJvmOpts("-Dorg.gradle.deprecation.trace=false") //suppress deprecation stack trace

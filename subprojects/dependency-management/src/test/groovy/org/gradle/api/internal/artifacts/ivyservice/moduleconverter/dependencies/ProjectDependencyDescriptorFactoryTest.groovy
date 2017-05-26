@@ -22,7 +22,9 @@ import org.gradle.api.internal.artifacts.DefaultModuleVersionSelector
 import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency
 import org.gradle.initialization.ProjectAccessListener
 import org.gradle.internal.component.local.model.DslOriginDependencyMetadata
+import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.util.TestUtil
+import org.junit.Rule
 import org.junit.Test
 
 import static org.hamcrest.Matchers.equalTo
@@ -32,6 +34,10 @@ public class ProjectDependencyDescriptorFactoryTest extends AbstractDependencyDe
 
     private ProjectIvyDependencyDescriptorFactory projectDependencyDescriptorFactory =
             new ProjectIvyDependencyDescriptorFactory(excludeRuleConverterStub);
+
+    @Rule
+    TestNameTestDirectoryProvider temporaryFolder = TestNameTestDirectoryProvider.newInstance()
+
 
     @Test
     public void canConvert() {
@@ -43,7 +49,7 @@ public class ProjectDependencyDescriptorFactoryTest extends AbstractDependencyDe
     public void testCreateFromProjectDependency() {
         ProjectDependency projectDependency = createProjectDependency(TEST_DEP_CONF);
         setUpDependency(projectDependency);
-        DslOriginDependencyMetadata dependencyMetaData = projectDependencyDescriptorFactory.createDependencyDescriptor(TEST_CONF, projectDependency);
+        DslOriginDependencyMetadata dependencyMetaData = projectDependencyDescriptorFactory.createDependencyDescriptor(TEST_CONF, null, projectDependency);
 
         assertDependencyDescriptorHasCommonFixtureValues(dependencyMetaData);
         assertFalse(dependencyMetaData.isChanging());
@@ -53,7 +59,7 @@ public class ProjectDependencyDescriptorFactoryTest extends AbstractDependencyDe
     }
 
     private ProjectDependency createProjectDependency(String dependencyConfiguration) {
-        Project dependencyProject = TestUtil.createRootProject();
+        Project dependencyProject = TestUtil.create(temporaryFolder).rootProject();
         dependencyProject.setGroup("someGroup");
         dependencyProject.setVersion("someVersion");
         dependencyProject.configurations.create(dependencyConfiguration)

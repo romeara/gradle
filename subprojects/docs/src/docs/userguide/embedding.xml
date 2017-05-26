@@ -39,8 +39,8 @@
     <section id="sec:embedding_features">
         <title>Tooling API Features</title>
         <para>A fundamental characteristic of the Tooling API is that it operates in a version independent way.
-            This means that you can use the same API to work with different target versions of Gradle, including versions that are both newer and older than the version of the Tooling API that you are using.
-            The Tooling API is Gradle wrapper aware and, by default, uses the same target Gradle version as that used by the wrapper-powered project.
+            This means that you can use the same API to work with builds that use different versions of Gradle, including versions that are newer or older than the version of the Tooling API that you are using.
+            The Tooling API is Gradle wrapper aware and, by default, uses the same Gradle version as that used by the wrapper-powered build.
         </para>
 
         <para>Some features that the Tooling API provides:
@@ -82,30 +82,21 @@
             in <filename>samples/toolingApi</filename> in your Gradle distribution. These samples specify all of the required dependencies for the Tooling API with examples for
             querying information from Gradle builds and executing tasks from the Tooling API.
         </para>
+        <para>To use the Tooling API, add the following repository and dependency declarations to your build script:</para>
+        <sample id="useToolingApi" dir="toolingApi/runBuild" title="Using the tooling API">
+            <sourcefile file="build.gradle" snippet="use-tooling-api"/>
+        </sample>
         <para>
             The main entry point to the Tooling API is the <apilink class="org.gradle.tooling.GradleConnector"/>. You can navigate from there to find code samples and
             explore the available Tooling API models.
 
-            There are two ways of using the <literal>GradleConnector</literal> to connect to a Gradle build.
-            <itemizedlist>
-                <listitem>
-                    You can use <apilink class="org.gradle.tooling.GradleConnector" method="connect()"/> to create a <apilink class="org.gradle.tooling.ProjectConnection"/>.
-                    A <literal>ProjectConnection</literal> connects to a single Gradle project. Using the connection you can execute tasks, tests and retrieve models relative to this project.
-                    This is the original API provided by the Tooling API. Use this API when you wish to use a stable non-incubating API.
-                </listitem>
-                <listitem>
-                    You can use <apilink class="org.gradle.tooling.GradleConnector" method="newGradleConnection()"/> to create a
-                    <apilink class="org.gradle.tooling.connection.GradleConnectionBuilder"/>.
-                    <literal>GradleConnectionBuilder</literal> can be used to connect to any number of Gradle builds at one time. Executing tasks and retrieving models are performed in the context
-                    of the composite. Instead of retrieving a single model for a single Gradle project, the Tooling API can provide all models for all projects with a single method call.
-                    Note that this API is currently <link linkend="feature_lifecycle">incubating</link> and may change at any time.
-                </listitem>
-            </itemizedlist>
+            You can use <apilink class="org.gradle.tooling.GradleConnector" method="connect()"/> to create a <apilink class="org.gradle.tooling.ProjectConnection"/>.
+            A <literal>ProjectConnection</literal> connects to a single Gradle project. Using the connection you can execute tasks, tests and retrieve models relative to this project.
         </para>
     </section>
 
     <section id="sec:embedding_compatibility">
-        <title>Gradle and Java version compatibility</title>
+        <title>Gradle version and Java version compatibility</title>
 
         <para>The current version of the Tooling API supports running builds using Gradle versions 1.2 and later.</para>
 

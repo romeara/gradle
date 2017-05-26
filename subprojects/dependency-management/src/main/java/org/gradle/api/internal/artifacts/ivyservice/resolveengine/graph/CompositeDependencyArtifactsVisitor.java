@@ -16,7 +16,6 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.resolveengine.graph;
 
-import org.gradle.api.internal.artifacts.ResolvedConfigurationIdentifier;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.ArtifactSet;
 import org.gradle.api.internal.artifacts.ivyservice.resolveengine.artifact.DependencyArtifactsVisitor;
 
@@ -31,9 +30,9 @@ public class CompositeDependencyArtifactsVisitor implements DependencyArtifactsV
     }
 
     @Override
-    public void visitArtifacts(ResolvedConfigurationIdentifier parent, ResolvedConfigurationIdentifier child, ArtifactSet artifacts) {
+    public void visitArtifacts(DependencyGraphNode from, DependencyGraphNode to, ArtifactSet artifacts) {
         for (DependencyArtifactsVisitor visitor : visitors) {
-            visitor.visitArtifacts(parent, child, artifacts);
+            visitor.visitArtifacts(from, to, artifacts);
         }
     }
 

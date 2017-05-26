@@ -50,6 +50,9 @@ class StartParameterTest extends Specification {
         parameter.refreshDependencies = true
         parameter.recompileScripts = true
         parameter.configureOnDemand = true
+        parameter.parallelProjectExecutionEnabled = true
+        parameter.taskOutputCacheEnabled = true
+        parameter.includeBuild(new File('participant'))
 
         when:
         def newInstance = parameter.newInstance()
@@ -71,6 +74,7 @@ class StartParameterTest extends Specification {
         parameter.projectProperties = [a: 'a']
         parameter.systemPropertiesArgs = [b: 'b']
         parameter.initScripts = [new File('init script'), new File("/path/to/another init script")]
+        parameter.includedBuilds = [new File('participant'), new File("/path/to/another/participant")]
 
         when:
         def newInstance = parameter.newInstance()
@@ -81,6 +85,7 @@ class StartParameterTest extends Specification {
         !parameter.excludedTaskNames.is(newInstance.excludedTaskNames)
         !parameter.projectProperties.is(newInstance.projectProperties)
         !parameter.systemPropertiesArgs.is(newInstance.systemPropertiesArgs)
+        !parameter.includedBuilds.is(newInstance.includedBuilds)
 
         and:
         parameter.initScripts == newInstance.initScripts
@@ -88,6 +93,7 @@ class StartParameterTest extends Specification {
         parameter.excludedTaskNames == newInstance.excludedTaskNames
         parameter.projectProperties == newInstance.projectProperties
         parameter.systemPropertiesArgs == newInstance.systemPropertiesArgs
+        parameter.includedBuilds == newInstance.includedBuilds
     }
 
     void "default values"() {
@@ -112,6 +118,8 @@ class StartParameterTest extends Specification {
         !parameter.rerunTasks
         !parameter.recompileScripts
         !parameter.refreshDependencies
+        !parameter.parallelProjectExecutionEnabled
+        !parameter.taskOutputCacheEnabled
 
         assertThat(parameter, isSerializable())
     }
@@ -273,6 +281,8 @@ class StartParameterTest extends Specification {
         parameter.recompileScripts = true
         parameter.rerunTasks = true
         parameter.refreshDependencies = true
+        parameter.parallelProjectExecutionEnabled = true
+        parameter.taskOutputCacheEnabled = true
 
         assertThat(parameter, isSerializable())
 
@@ -291,6 +301,8 @@ class StartParameterTest extends Specification {
         newParameter.rerunTasks == parameter.rerunTasks
         newParameter.recompileScripts == parameter.recompileScripts
         newParameter.systemPropertiesArgs == parameter.systemPropertiesArgs
+        newParameter.parallelProjectExecutionEnabled == parameter.parallelProjectExecutionEnabled
+        newParameter.taskOutputCacheEnabled == parameter.taskOutputCacheEnabled
 
         newParameter.buildFile == null
         newParameter.taskRequests.empty

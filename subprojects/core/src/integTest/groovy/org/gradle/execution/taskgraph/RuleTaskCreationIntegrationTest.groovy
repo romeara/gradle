@@ -57,7 +57,7 @@ class RuleTaskCreationIntegrationTest extends AbstractIntegrationSpec implements
         """
 
         when:
-        succeeds "tasks"
+        succeeds "tasks", "--all"
 
         then:
         output.contains "a - task a"
@@ -84,7 +84,7 @@ class RuleTaskCreationIntegrationTest extends AbstractIntegrationSpec implements
         """
 
         when:
-        succeeds "tasks"
+        succeeds "tasks", "--all"
 
         then:
         output.contains "a - task a"
@@ -583,7 +583,7 @@ foo configured
         buildFile << """
 tasks.create(name: 'taskContainerTask', type: DefaultTask) { }
 
-task standardTask << {}
+task standardTask
 
 model {
   tasks {

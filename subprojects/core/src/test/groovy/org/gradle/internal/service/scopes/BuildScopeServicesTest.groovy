@@ -24,13 +24,13 @@ import org.gradle.api.internal.GradleInternal
 import org.gradle.api.internal.SettingsInternal
 import org.gradle.api.internal.ThreadGlobalInstantiator
 import org.gradle.api.internal.artifacts.DependencyManagementServices
-import org.gradle.api.internal.changedetection.state.CacheAccessingFileSnapshotter
 import org.gradle.api.internal.classpath.DefaultModuleRegistry
 import org.gradle.api.internal.classpath.ModuleRegistry
 import org.gradle.api.internal.classpath.PluginModuleRegistry
 import org.gradle.api.internal.file.FileLookup
 import org.gradle.api.internal.file.FileResolver
 import org.gradle.api.internal.file.collections.DirectoryFileTreeFactory
+import org.gradle.api.internal.hash.FileHasher
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderCache
 import org.gradle.api.internal.project.DefaultProjectRegistry
 import org.gradle.api.internal.project.IProjectFactory
@@ -40,7 +40,6 @@ import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.internal.project.ProjectRegistry
 import org.gradle.api.internal.project.antbuilder.DefaultIsolatedAntBuilder
 import org.gradle.api.logging.configuration.LoggingConfiguration
-import org.gradle.cache.CacheRepository
 import org.gradle.cache.internal.CacheFactory
 import org.gradle.configuration.BuildConfigurer
 import org.gradle.configuration.DefaultBuildConfigurer
@@ -75,6 +74,7 @@ import org.gradle.internal.logging.LoggingManagerInternal
 import org.gradle.internal.logging.progress.ProgressLoggerFactory
 import org.gradle.internal.operations.logging.BuildOperationLoggerFactory
 import org.gradle.internal.operations.logging.DefaultBuildOperationLoggerFactory
+import org.gradle.internal.progress.BuildOperationExecutor
 import org.gradle.internal.reflect.Instantiator
 import org.gradle.model.internal.inspect.ModelRuleSourceDetector
 import org.gradle.plugin.repository.internal.PluginRepositoryFactory
@@ -117,7 +117,7 @@ public class BuildScopeServicesTest extends Specification {
         sessionServices.get(ClassLoaderCache) >> Mock(ClassLoaderCache)
         sessionServices.get(ImportsReader) >> Mock(ImportsReader)
         sessionServices.get(StartParameter) >> startParameter
-        sessionServices.get(CacheAccessingFileSnapshotter) >> Mock(CacheAccessingFileSnapshotter)
+        sessionServices.get(FileHasher) >> Mock(FileHasher)
         sessionServices.get(ClassPathSnapshotter) >> Mock(ClassPathSnapshotter)
         sessionServices.get(ClassLoaderHierarchyHasher) >> Mock(ClassLoaderHierarchyHasher)
         sessionServices.get(CrossBuildInMemoryCachingScriptClassCache) >> Mock(CrossBuildInMemoryCachingScriptClassCache)
@@ -126,7 +126,7 @@ public class BuildScopeServicesTest extends Specification {
         sessionServices.get(PluginRepositoryFactory) >> Mock(PluginRepositoryFactory)
         sessionServices.getAll(_) >> []
 
-        registry = new BuildScopeServices(sessionServices, false)
+        registry = new BuildScopeServices(sessionServices, startParameter)
     }
 
     def cleanup() {
@@ -151,7 +151,7 @@ public class BuildScopeServicesTest extends Specification {
         }
 
         when:
-        new BuildScopeServices(sessionServices, false)
+        new BuildScopeServices(sessionServices, startParameter)
 
         then:
         1 * plugin1.registerBuildServices(_)
@@ -211,7 +211,7 @@ public class BuildScopeServicesTest extends Specification {
     def providesAScriptCompilerFactory() {
         setup:
         expectListenerManagerCreated()
-        expectParentServiceLocated(CacheRepository)
+        expectParentServiceLocated(CacheFactory)
 
         expect:
         registry.get(ScriptCompilerFactory) instanceof DefaultScriptCompilerFactory
@@ -222,7 +222,8 @@ public class BuildScopeServicesTest extends Specification {
         setup:
         expectListenerManagerCreated()
         allowGetGradleInstallation()
-        expectParentServiceLocated(CacheRepository)
+        expectParentServiceLocated(BuildOperationExecutor)
+        expectParentServiceLocated(CacheFactory)
 
         expect:
         registry.get(InitScriptHandler) instanceof InitScriptHandler
@@ -232,7 +233,7 @@ public class BuildScopeServicesTest extends Specification {
     def providesAScriptObjectConfigurerFactory() {
         setup:
         expectListenerManagerCreated()
-        expectParentServiceLocated(CacheRepository)
+        expectParentServiceLocated(CacheFactory)
 
         expect:
         assertThat(registry.get(ScriptPluginFactory), instanceOf(ScriptPluginFactorySelector))
@@ -242,7 +243,8 @@ public class BuildScopeServicesTest extends Specification {
     def providesASettingsProcessor() {
         setup:
         expectListenerManagerCreated()
-        expectParentServiceLocated(CacheRepository)
+        expectParentServiceLocated(CacheFactory)
+        expectParentServiceLocated(BuildOperationExecutor)
 
         expect:
         assertThat(registry.get(SettingsProcessor), instanceOf(NotifyingSettingsProcessor))
@@ -327,14 +329,6 @@ public class BuildScopeServicesTest extends Specification {
 
         then:
         operationLoggerFactory instanceof DefaultBuildOperationLoggerFactory
-    }
-
-    def "closes session when single use"() {
-        when:
-        new BuildScopeServices(sessionServices, true).close()
-
-        then:
-        1 * sessionServices.close()
     }
 
     private <T> T expectParentServiceLocated(Class<T> type) {

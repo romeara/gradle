@@ -16,7 +16,12 @@
 
 package org.gradle.cache.internal;
 
+import com.google.common.hash.Hashing;
+import org.gradle.api.Nullable;
+import org.gradle.api.internal.hash.FileHasher;
 import org.gradle.cache.CacheRepository;
+import org.gradle.internal.classloader.ClassLoaderHierarchyHasher;
+import org.gradle.internal.classloader.ClassPathSnapshotter;
 import org.gradle.util.GradleVersion;
 
 import java.io.File;
@@ -25,15 +30,22 @@ public class CacheRepositoryServices {
     private final File gradleUserHomeDir;
     private final File projectCacheDir;
 
-    public CacheRepositoryServices(File gradleUserHomeDir, File projectCacheDir) {
+    public CacheRepositoryServices(File gradleUserHomeDir, @Nullable File projectCacheDir) {
         this.gradleUserHomeDir = gradleUserHomeDir;
         this.projectCacheDir = projectCacheDir;
     }
 
-    protected CacheRepository createCacheRepository(CacheFactory factory) {
-        DefaultCacheScopeMapping scopeMapping = new DefaultCacheScopeMapping(gradleUserHomeDir, projectCacheDir, GradleVersion.current());
+    protected CacheScopeMapping createCacheScopeMapping() {
+        return new DefaultCacheScopeMapping(gradleUserHomeDir, projectCacheDir, GradleVersion.current());
+    }
+
+    protected CacheRepository createCacheRepository(CacheFactory factory, CacheScopeMapping scopeMapping) {
         return new DefaultCacheRepository(
             scopeMapping,
             factory);
+    }
+
+    protected CacheKeyBuilder createCacheKeyBuilder(FileHasher fileHasher, ClassPathSnapshotter snapshotter, ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
+        return new DefaultCacheKeyBuilder(Hashing.md5(), fileHasher, snapshotter, classLoaderHierarchyHasher);
     }
 }

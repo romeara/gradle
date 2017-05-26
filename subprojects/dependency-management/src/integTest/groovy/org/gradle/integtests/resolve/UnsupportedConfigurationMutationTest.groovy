@@ -20,6 +20,7 @@ import org.gradle.integtests.fixtures.FluidDependenciesResolveRunner
 import org.gradle.test.fixtures.maven.MavenFileRepository
 import org.junit.runner.RunWith
 import spock.lang.Issue
+import spock.lang.Unroll
 
 @RunWith(FluidDependenciesResolveRunner)
 class UnsupportedConfigurationMutationTest extends AbstractIntegrationSpec {
@@ -140,9 +141,11 @@ class UnsupportedConfigurationMutationTest extends AbstractIntegrationSpec {
             }
 
             project(":api") {
-                task addDependency << {
-                   dependencies {
-                        compile "org.utils:extra:1.5"
+                task addDependency {
+                    doLast {
+                        dependencies {
+                            compile "org.utils:extra:1.5"
+                        }
                     }
                 }
             }
@@ -152,26 +155,34 @@ class UnsupportedConfigurationMutationTest extends AbstractIntegrationSpec {
                     compile project(":api")
                 }
 
-                task addDependency << {
-                    dependencies {
-                        compile "org.utils:extra:1.5"
+                task addDependency {
+                    doLast {
+                        dependencies {
+                            compile "org.utils:extra:1.5"
+                        }
                     }
                 }
 
-                task modifyConfigDuringTaskExecution(dependsOn: [':impl:addDependency', configurations.compile]) << {
-                    def files = configurations.compile.files
-                    assert files*.name.sort() == ["api.jar", "extra-1.5.jar"]
-                    assert files*.exists() == [ true, true ]
+                task modifyConfigDuringTaskExecution(dependsOn: [':impl:addDependency', configurations.compile]) {
+                    doLast {
+                        def files = configurations.compile.files
+                        assert files*.name.sort() == ["api.jar", "extra-1.5.jar"]
+                        assert files*.exists() == [ true, true ]
+                    }
                 }
-                task modifyParentConfigDuringTaskExecution(dependsOn: [':impl:addDependency', configurations.testCompile]) << {
-                    def files = configurations.testCompile.files
-                    assert files*.name.sort() == ["api.jar", "extra-1.5.jar"]
-                    assert files*.exists() == [ true, true ]
+                task modifyParentConfigDuringTaskExecution(dependsOn: [':impl:addDependency', configurations.testCompile]) {
+                    doLast {
+                        def files = configurations.testCompile.files
+                        assert files*.name.sort() == ["api.jar", "extra-1.5.jar"]
+                        assert files*.exists() == [ true, true ]
+                    }
                 }
-                task modifyDependentConfigDuringTaskExecution(dependsOn: [':api:addDependency', configurations.compile]) << {
-                    def files = configurations.compile.files
-                    assert files*.name.sort() == ["api.jar"] // Late dependency is not honoured
-                    assert files*.exists() == [ true ]
+                task modifyDependentConfigDuringTaskExecution(dependsOn: [':api:addDependency', configurations.compile]) {
+                    doLast {
+                        def files = configurations.compile.files
+                        assert files*.name.sort() == ["api.jar"] // Late dependency is not honoured
+                        assert files*.exists() == [ true ]
+                    }
                 }
             }
 """
@@ -211,8 +222,10 @@ class UnsupportedConfigurationMutationTest extends AbstractIntegrationSpec {
             }
 
             project(":api") {
-                task addArtifact << {
-                    artifacts { compile file("some.jar") }
+                task addArtifact {
+                    doLast {
+                        artifacts { compile file("some.jar") }
+                    }
                 }
             }
 
@@ -220,8 +233,10 @@ class UnsupportedConfigurationMutationTest extends AbstractIntegrationSpec {
                 dependencies {
                     compile project(":api")
                 }
-                task addArtifact << {
-                    artifacts { compile file("some.jar") }
+                task addArtifact {
+                    doLast {
+                        artifacts { compile file("some.jar") }
+                    }
                 }
 
                 task addArtifactToConfigDuringTaskExecution(dependsOn: [':impl:addArtifact', configurations.compile])
@@ -435,5 +450,46 @@ task resolveChildFirst {
 
         then:
         succeeds("resolveChildFirst")
+    }
+
+    def "does not allow adding attribute to a configuration that has been resolved"() {
+        buildFile << """
+            configurations { a }
+            configurations.a.resolve()
+            configurations.a.attribute('foo', 'bar')
+        """
+        when: fails()
+        then: failure.assertHasCause("Cannot change attributes of configuration ':a' after it has been resolved")
+    }
+
+    def "does not allow adding attributes to a configuration that has been resolved"() {
+        buildFile << """
+            configurations { a }
+            configurations.a.resolve()
+            configurations.a.attributes(foo: 'bar')
+        """
+        when: fails()
+        then: failure.assertHasCause("Cannot change attributes of configuration ':a' after it has been resolved")
+    }
+
+    @Unroll
+    def "cannot change the configuration role (#code) after it has been resolved"() {
+        buildFile << """
+            configurations { a }
+            configurations.a.resolve()
+            ${code}
+        """
+        when:
+        fails()
+
+        then:
+        failure.assertHasCause("Cannot change role of configuration ':a' after it has been resolved")
+
+        where:
+        role                      | code
+        'consume or publish only' | 'configurations.a.canBeResolved = false'
+        'query or resolve only'   | 'configurations.a.canBeConsumed = false'
+        'bucket'                  | 'configurations.a.canBeResolved = false; configurations.a.canBeConsumed = false'
+
     }
 }

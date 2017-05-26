@@ -19,26 +19,27 @@ import com.google.common.collect.Lists;
 import org.gradle.api.GradleException;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.classpath.ClassPath;
-import org.gradle.internal.composite.GradleParticipantBuild;
 import org.gradle.tooling.CancellationToken;
-import org.gradle.tooling.GradleConnectionException;
 import org.gradle.tooling.events.ProgressListener;
 import org.gradle.tooling.internal.adapter.ProtocolToModelAdapter;
-import org.gradle.tooling.internal.connection.DefaultBuildIdentifier;
 import org.gradle.tooling.internal.consumer.CancellationTokenInternal;
-import org.gradle.tooling.internal.consumer.CompositeConnectionParameters;
 import org.gradle.tooling.internal.consumer.ConnectionParameters;
-import org.gradle.tooling.internal.consumer.ProjectConnectionParameters;
 import org.gradle.tooling.internal.gradle.TaskListingLaunchable;
-import org.gradle.tooling.internal.protocol.*;
-import org.gradle.tooling.model.BuildIdentifier;
+import org.gradle.tooling.internal.protocol.BuildOperationParametersVersion1;
+import org.gradle.tooling.internal.protocol.BuildParameters;
+import org.gradle.tooling.internal.protocol.BuildParametersVersion1;
+import org.gradle.tooling.internal.protocol.InternalLaunchable;
+import org.gradle.tooling.internal.protocol.ProgressListenerVersion1;
 import org.gradle.tooling.model.Launchable;
 import org.gradle.tooling.model.Task;
 
 import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class ConsumerOperationParameters implements BuildOperationParametersVersion1, BuildParametersVersion1, BuildParameters {
@@ -65,7 +66,6 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
         private List<String> tasks;
         private List<InternalLaunchable> launchables;
         private ClassPath injectedPluginClasspath = ClassPath.EMPTY;
-        private BuildIdentifier buildIdentifier;
 
         private Builder() {
         }
@@ -171,23 +171,13 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
             this.cancellationToken = cancellationToken;
         }
 
-        public Builder setRootDirectory(File rootDirectory) {
-            this.buildIdentifier = new DefaultBuildIdentifier(rootDirectory);
-            return this;
-        }
-
-        public Builder setBuildIdentifier(BuildIdentifier buildIdentifier) {
-            this.buildIdentifier = buildIdentifier;
-            return this;
-        }
-
         public ConsumerOperationParameters build() {
             if (entryPoint == null) {
                 throw new IllegalStateException("No entry point specified.");
             }
 
             return new ConsumerOperationParameters(entryPoint, parameters, stdout, stderr, colorOutput, stdin, javaHome, jvmArguments, arguments, tasks, launchables, injectedPluginClasspath,
-                legacyProgressListeners, testProgressListeners, taskProgressListeners, buildOperationProgressListeners, cancellationToken, buildIdentifier);
+                legacyProgressListeners, testProgressListeners, taskProgressListeners, buildOperationProgressListeners, cancellationToken);
         }
 
         public void copyFrom(ConsumerOperationParameters operationParameters) {
@@ -227,7 +217,6 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
     private final List<String> tasks;
     private final List<InternalLaunchable> launchables;
     private final ClassPath injectedPluginClasspath;
-    private final BuildIdentifier buildIdentifier;
 
     private final List<org.gradle.tooling.ProgressListener> legacyProgressListeners;
     private final List<ProgressListener> testProgressListeners;
@@ -237,7 +226,7 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
     private ConsumerOperationParameters(String entryPointName, ConnectionParameters parameters, OutputStream stdout, OutputStream stderr, Boolean colorOutput, InputStream stdin,
                                         File javaHome, List<String> jvmArguments, List<String> arguments, List<String> tasks, List<InternalLaunchable> launchables, ClassPath injectedPluginClasspath,
                                         List<org.gradle.tooling.ProgressListener> legacyProgressListeners, List<ProgressListener> testProgressListeners, List<ProgressListener> taskProgressListeners,
-                                        List<ProgressListener> buildOperationProgressListeners, CancellationToken cancellationToken, BuildIdentifier buildIdentifier) {
+                                        List<ProgressListener> buildOperationProgressListeners, CancellationToken cancellationToken) {
         this.entryPointName = entryPointName;
         this.parameters = parameters;
         this.stdout = stdout;
@@ -251,7 +240,6 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
         this.launchables = launchables;
         this.injectedPluginClasspath = injectedPluginClasspath;
         this.cancellationToken = cancellationToken;
-        this.buildIdentifier = buildIdentifier;
         this.legacyProgressListeners = legacyProgressListeners;
         this.testProgressListeners = testProgressListeners;
         this.taskProgressListeners = taskProgressListeners;
@@ -300,14 +288,14 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
      * @since 1.0-milestone-3
      */
     public File getProjectDir() {
-        return parameters instanceof ProjectConnectionParameters ? ((ProjectConnectionParameters) parameters).getProjectDir() : null;
+        return parameters.getProjectDir();
     }
 
     /**
      * @since 1.0-milestone-3
      */
     public Boolean isSearchUpwards() {
-        return parameters instanceof ProjectConnectionParameters ? ((ProjectConnectionParameters) parameters).isSearchUpwards() : Boolean.FALSE;
+        return parameters.isSearchUpwards();
     }
 
     /**
@@ -411,35 +399,4 @@ public class ConsumerOperationParameters implements BuildOperationParametersVers
         return ((CancellationTokenInternal) cancellationToken).getToken();
     }
 
-    public List<GradleParticipantBuild> getBuilds() {
-        if (!(parameters instanceof CompositeConnectionParameters)) {
-            return null;
-        }
-        List<GradleParticipantBuild> unorderedBuilds = ((CompositeConnectionParameters) parameters).getBuilds();
-        if (buildIdentifier == null) {
-            return unorderedBuilds;
-        }
-
-        GradleParticipantBuild targetBuild = null;
-        List<GradleParticipantBuild> builds = new LinkedList<GradleParticipantBuild>();
-        for (GradleParticipantBuild build : unorderedBuilds) {
-            BuildIdentifier participantIdentifier = new DefaultBuildIdentifier(build.getProjectDir());
-            if (participantIdentifier.equals(buildIdentifier)) {
-                targetBuild = build;
-            } else {
-                builds.add(build);
-            }
-        }
-        if (targetBuild == null) {
-            throw new GradleConnectionException("Not a valid build: " + buildIdentifier, new IllegalStateException("Build not part of composite"));
-        } else {
-            builds.add(0, targetBuild);
-        }
-
-        return builds;
-    }
-
-    public BuildIdentifier getBuildIdentifier() {
-        return buildIdentifier;
-    }
 }

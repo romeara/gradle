@@ -24,6 +24,7 @@ import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.internal.file.collections.FileTreeAdapter;
 import org.gradle.api.internal.file.collections.MapFileTree;
 import org.gradle.api.internal.file.copy.CopySpecInternal;
+import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
@@ -44,6 +45,7 @@ import java.util.concurrent.Callable;
 /**
  * Assembles an EAR archive.
  */
+@CacheableTask
 public class Ear extends Jar {
     public static final String EAR_EXTENSION = "ear";
 
@@ -59,19 +61,16 @@ public class Ear extends Jar {
                 return getLibDirName();
             }
         });
-        getMainSpec().eachFile(
+        getMainSpec().appendCachingSafeCopyAction(
             new Action<FileCopyDetails>() {
                 @Override
                 public void execute(FileCopyDetails details) {
-                    DeploymentDescriptor deploymentDescriptor = getDeploymentDescriptor();
-                    String descriptorPath = deploymentDescriptor != null ? "META-INF/" + deploymentDescriptor.getFileName() : null;
-                    if (details.getPath().equalsIgnoreCase(descriptorPath)) {
-                        // the deployment descriptor already exists; no need to generate it
-                        deploymentDescriptor = null;
-                        setDeploymentDescriptor(null);
-                        details.setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE);
-                    }
+                    checkIfShouldGenerateDeploymentDescriptor(details);
+                    recordTopLevelModules(details);
+                }
 
+                private void recordTopLevelModules(FileCopyDetails details) {
+                    DeploymentDescriptor deploymentDescriptor = getDeploymentDescriptor();
                     // since we might generate the deployment descriptor, record each top-level module
                     if (deploymentDescriptor != null && details.getPath().lastIndexOf("/") <= 0) {
                         EarModule module;
@@ -84,6 +83,16 @@ public class Ear extends Jar {
                         if (!deploymentDescriptor.getModules().contains(module)) {
                             deploymentDescriptor.getModules().add(module);
                         }
+                    }
+                }
+
+                private void checkIfShouldGenerateDeploymentDescriptor(FileCopyDetails details) {
+                    DeploymentDescriptor deploymentDescriptor = getDeploymentDescriptor();
+                    String descriptorPath = deploymentDescriptor != null ? "META-INF/" + deploymentDescriptor.getFileName() : null;
+                    if (details.getPath().equalsIgnoreCase(descriptorPath)) {
+                        // the deployment descriptor already exists; no need to generate it
+                        setDeploymentDescriptor(null);
+                        details.setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE);
                     }
                 }
             }

@@ -17,18 +17,20 @@
 package org.gradle.api.internal.changedetection.rules;
 
 import com.google.common.base.Charsets;
-import com.google.common.base.Objects;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.changedetection.state.TaskExecution;
 import org.gradle.internal.classloader.ClassLoaderHierarchyHasher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.List;
 
 class TaskTypeTaskStateChanges extends SimpleTaskStateChanges {
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskTypeTaskStateChanges.class);
     private static final HashCode NO_ACTION_LOADERS = Hashing.md5().hashString("no-action-loaders", Charsets.UTF_8);
     private final String taskPath;
     private final String taskClass;
@@ -39,10 +41,14 @@ class TaskTypeTaskStateChanges extends SimpleTaskStateChanges {
     public TaskTypeTaskStateChanges(TaskExecution previousExecution, TaskExecution currentExecution, String taskPath, Class<? extends TaskInternal> taskClass, Collection<ClassLoader> taskActionClassLoaders, ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
         String taskClassName = taskClass.getName();
         currentExecution.setTaskClass(taskClassName);
-        HashCode taskClassLoaderHash = classLoaderHierarchyHasher.getStrictHash(taskClass.getClassLoader());
+        HashCode taskClassLoaderHash = classLoaderHierarchyHasher.getClassLoaderHash(taskClass.getClassLoader());
         currentExecution.setTaskClassLoaderHash(taskClassLoaderHash);
         HashCode taskActionsClassLoaderHash = calculateActionClassLoaderHash(taskActionClassLoaders, classLoaderHierarchyHasher);
         currentExecution.setTaskActionsClassLoaderHash(taskActionsClassLoaderHash);
+        if (LOGGER.isInfoEnabled()) {
+            LOGGER.info("Task {} class loader hash: {}", taskPath, taskClassLoaderHash);
+            LOGGER.info("Task {} actions class loader hash: {}", taskPath, taskActionsClassLoaderHash);
+        }
         this.taskPath = taskPath;
         this.taskClass = taskClassName;
         this.taskClassLoaderHash = taskClassLoaderHash;
@@ -56,7 +62,7 @@ class TaskTypeTaskStateChanges extends SimpleTaskStateChanges {
         }
         Hasher hasher = Hashing.md5().newHasher();
         for (ClassLoader taskActionClassLoader : taskActionClassLoaders) {
-            HashCode actionLoaderHash = classLoaderHierarchyHasher.getStrictHash(taskActionClassLoader);
+            HashCode actionLoaderHash = classLoaderHierarchyHasher.getClassLoaderHash(taskActionClassLoader);
             if (actionLoaderHash == null) {
                 return null;
             }
@@ -72,12 +78,28 @@ class TaskTypeTaskStateChanges extends SimpleTaskStateChanges {
                     taskPath, previousExecution.getTaskClass(), taskClass));
             return;
         }
-        if (!Objects.equal(this.taskClassLoaderHash, previousExecution.getTaskClassLoaderHash())) {
-            changes.add(new DescriptiveChange("Task '%s' class path has changed.", taskPath));
+        if (taskClassLoaderHash == null) {
+            changes.add(new DescriptiveChange("Task '%s' was loaded with an unknown classloader", taskPath));
             return;
         }
-        if (!Objects.equal(this.taskActionsClassLoaderHash, previousExecution.getTaskActionsClassLoaderHash())) {
-            changes.add(new DescriptiveChange("Task '%s' additional action class path has changed.", taskPath));
+        if (previousExecution.getTaskClassLoaderHash() == null) {
+            changes.add(new DescriptiveChange("Task '%s' was loaded with an unknown classloader during the previous execution", taskPath));
+            return;
+        }
+        if (taskActionsClassLoaderHash == null) {
+            changes.add(new DescriptiveChange("Task '%s' has a custom action that was loaded with an unknown classloader", taskPath));
+            return;
+        }
+        if (previousExecution.getTaskActionsClassLoaderHash() == null) {
+            changes.add(new DescriptiveChange("Task '%s' had a custom action that was loaded with an unknown classloader during the previous execution", taskPath));
+            return;
+        }
+        if (!taskClassLoaderHash.equals(previousExecution.getTaskClassLoaderHash())) {
+            changes.add(new DescriptiveChange("Task '%s' class path has changed from %s to %s.", taskPath, previousExecution.getTaskClassLoaderHash(), taskClassLoaderHash));
+            return;
+        }
+        if (!taskActionsClassLoaderHash.equals(previousExecution.getTaskActionsClassLoaderHash())) {
+            changes.add(new DescriptiveChange("Task '%s' additional action class path has changed from %s to %s.", taskPath, previousExecution.getTaskActionsClassLoaderHash(), taskActionsClassLoaderHash));
         }
     }
 }

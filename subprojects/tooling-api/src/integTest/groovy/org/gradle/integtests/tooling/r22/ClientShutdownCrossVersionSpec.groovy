@@ -21,8 +21,6 @@ import org.gradle.integtests.tooling.fixture.TargetGradleVersion
 import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
 import org.gradle.integtests.tooling.fixture.ToolingApiVersion
 import org.gradle.test.fixtures.server.http.CyclicBarrierHttpServer
-import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.internal.consumer.DefaultGradleConnector
 import org.gradle.tooling.model.gradle.GradleBuild
 import org.junit.Rule
 
@@ -31,32 +29,33 @@ class ClientShutdownCrossVersionSpec extends ToolingApiSpecification {
     @Rule
     CyclicBarrierHttpServer server = new CyclicBarrierHttpServer()
 
+    def setup() {
+        toolingApi.requireIsolatedToolingApi()
+    }
+
     def cleanup() {
-        reset()
+        toolingApi.close()
     }
 
     def "can shutdown tooling API session when no operations have been executed"() {
         given:
-        DefaultGradleConnector.close()
+        toolingApi.close();
 
         when:
-        GradleConnector.newConnector()
+        toolingApi.withConnection {}
         then:
         IllegalStateException e = thrown()
     }
 
     @TargetGradleVersion(">=2.2")
     def "cleans up idle daemons when tooling API session is shutdown"() {
-        given:
-        toolingApi.requireIsolatedDaemons()
-
         withConnection { connection ->
             connection.getModel(GradleBuild)
         }
         toolingApi.daemons.daemon.assertIdle()
 
         when:
-        DefaultGradleConnector.close()
+        toolingApi.close()
 
         then:
         toolingApi.daemons.daemon.stops()
@@ -66,10 +65,8 @@ class ClientShutdownCrossVersionSpec extends ToolingApiSpecification {
     def "cleans up busy daemons once they become idle when tooling API session is shutdown"() {
         given:
         buildFile << """
-task slow << { new URL("${server.uri}").text }
+task slow { doLast { new URL("${server.uri}").text } }
 """
-
-        toolingApi.requireIsolatedDaemons()
         withConnection { connection ->
             connection.getModel(GradleBuild)
         }
@@ -80,7 +77,7 @@ task slow << { new URL("${server.uri}").text }
         toolingApi.daemons.daemon.assertBusy()
 
         when:
-        DefaultGradleConnector.close()
+        toolingApi.close()
 
         then:
         toolingApi.daemons.daemon.assertBusy()
@@ -96,8 +93,6 @@ task slow << { new URL("${server.uri}").text }
     @TargetGradleVersion(">=2.2")
     def "shutdown ignores daemons that are no longer running"() {
         given:
-        toolingApi.requireIsolatedDaemons()
-
         withConnection { connection ->
             connection.getModel(GradleBuild)
         }
@@ -105,7 +100,7 @@ task slow << { new URL("${server.uri}").text }
         toolingApi.daemons.daemon.kill()
 
         when:
-        DefaultGradleConnector.close()
+        toolingApi.close()
 
         then:
         noExceptionThrown()
@@ -114,7 +109,6 @@ task slow << { new URL("${server.uri}").text }
     @TargetGradleVersion(">=2.2")
     def "shutdown ignores daemons that were not started by client"() {
         given:
-        toolingApi.requireIsolatedDaemons()
         daemonExecutor().run()
         toolingApi.daemons.daemon.assertIdle()
 
@@ -124,7 +118,7 @@ task slow << { new URL("${server.uri}").text }
         toolingApi.daemons.daemon.assertIdle()
 
         when:
-        DefaultGradleConnector.close()
+        toolingApi.close()
 
         then:
         toolingApi.daemons.daemon.assertIdle()
@@ -133,6 +127,6 @@ task slow << { new URL("${server.uri}").text }
     private GradleExecuter daemonExecutor() {
         // Need to use the same JVM args to start daemon as those used by tooling api fixture
         // TODO - use more sane JVM args here and for the daemons started using tooling api fixture
-        targetDist.executer(temporaryFolder).withNoExplicitTmpDir().withDaemonBaseDir(toolingApi.daemonBaseDir).withBuildJvmOpts("-Xmx1024m", "-XX:MaxPermSize=256m", "-XX:+HeapDumpOnOutOfMemoryError").useDefaultBuildJvmArgs().requireDaemon()
+        targetDist.executer(temporaryFolder, getBuildContext()).withNoExplicitTmpDir().withDaemonBaseDir(toolingApi.daemonBaseDir).withBuildJvmOpts("-Xmx1024m", "-XX:MaxPermSize=256m", "-XX:+HeapDumpOnOutOfMemoryError").useDefaultBuildJvmArgs().requireDaemon()
     }
 }

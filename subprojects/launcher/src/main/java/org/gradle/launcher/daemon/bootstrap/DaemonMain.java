@@ -20,10 +20,10 @@ import org.gradle.api.UncheckedIOException;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
-import org.gradle.internal.TrueTimeProvider;
 import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.logging.LoggingManagerInternal;
 import org.gradle.internal.logging.services.LoggingServiceRegistry;
+import org.gradle.internal.nativeintegration.ProcessEnvironment;
 import org.gradle.internal.nativeintegration.services.NativeServices;
 import org.gradle.internal.remote.Address;
 import org.gradle.internal.serialize.kryo.KryoBackedDecoder;
@@ -37,6 +37,7 @@ import org.gradle.launcher.daemon.server.Daemon;
 import org.gradle.launcher.daemon.server.DaemonServices;
 import org.gradle.launcher.daemon.server.MasterExpirationStrategy;
 import org.gradle.launcher.daemon.server.expiry.DaemonExpirationStrategy;
+import org.gradle.process.internal.shutdown.ShutdownHookActionRegister;
 import org.gradle.process.internal.streams.EncodedStream;
 
 import java.io.ByteArrayInputStream;
@@ -103,12 +104,15 @@ public class DaemonMain extends EntryPoint {
         LoggingServiceRegistry loggingRegistry = LoggingServiceRegistry.newCommandLineProcessLogging();
         LoggingManagerInternal loggingManager = loggingRegistry.newInstance(LoggingManagerInternal.class);
 
-        TrueTimeProvider timeProvider = new TrueTimeProvider();
-        DaemonServices daemonServices = new DaemonServices(parameters, loggingRegistry, loggingManager, new DefaultClassPath(additionalClassPath), timeProvider.getCurrentTime());
+        DaemonServices daemonServices = new DaemonServices(parameters, loggingRegistry, loggingManager, new DefaultClassPath(additionalClassPath));
         File daemonLog = daemonServices.getDaemonLogFile();
 
         // Any logging prior to this point will not end up in the daemon log file.
         initialiseLogging(loggingManager, daemonLog);
+
+        // Detach the process from the parent terminal/console
+        ProcessEnvironment processEnvironment = daemonServices.get(ProcessEnvironment.class);
+        processEnvironment.maybeDetachProcess();
 
         LOGGER.debug("Assuming the daemon was started with following jvm opts: {}", startupOpts);
 
@@ -158,7 +162,7 @@ public class DaemonMain extends EntryPoint {
         }
         final PrintStream log = result;
 
-        Runtime.getRuntime().addShutdownHook(new Thread() {
+        ShutdownHookActionRegister.addAction(new Runnable() {
             public void run() {
                 //just in case we have a bug related to logging,
                 //printing some exit info directly to file:

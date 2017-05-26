@@ -16,6 +16,7 @@
 
 package org.gradle.api.internal.artifacts.dependencies;
 
+import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ProjectDependency;
 
 public interface ProjectDependencyInternal extends ProjectDependency {
@@ -23,6 +24,7 @@ public interface ProjectDependencyInternal extends ProjectDependency {
     /**
      * This method is called when the project dependency is resolved
      */
-    public void beforeResolved();
+    void beforeResolved();
 
+    Configuration findProjectConfiguration();
 }

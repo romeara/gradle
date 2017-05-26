@@ -19,6 +19,7 @@ package org.gradle.plugins.ide.internal.tooling.eclipse
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
 import org.gradle.api.internal.artifacts.ivyservice.projectmodule.LocalComponentRegistry
+import org.gradle.api.internal.composite.CompositeBuildContext
 import org.gradle.api.plugins.GroovyBasePlugin
 import org.gradle.api.plugins.GroovyPlugin
 import org.gradle.api.plugins.JavaBasePlugin
@@ -33,21 +34,23 @@ import org.gradle.plugins.ide.eclipse.EclipseWtpPlugin
 import org.gradle.plugins.ide.eclipse.model.BuildCommand
 import org.gradle.plugins.ide.internal.tooling.EclipseModelBuilder
 import org.gradle.plugins.ide.internal.tooling.GradleProjectBuilder
-import org.gradle.tooling.internal.gradle.DefaultGradleProject
+import org.gradle.test.fixtures.AbstractProjectBuilderSpec
+import org.gradle.test.fixtures.file.CleanupTestDirectory
+import org.gradle.testfixtures.ProjectBuilder
 import org.gradle.util.TestUtil
-import spock.lang.Specification
+import org.gradle.util.UsesNativeServices
 import spock.lang.Unroll
 
-class EclipseModelBuilderTest extends Specification {
-
-    Project project
+@UsesNativeServices
+@CleanupTestDirectory
+class EclipseModelBuilderTest extends AbstractProjectBuilderSpec {
     Project child1
     Project child2
 
     def setup() {
-        project = TestUtil.builder().withName("project").build()
-        child1 = TestUtil.builder().withName("child1").withParent(project).build()
-        child2 = TestUtil.builder().withName("child2").withParent(project).build()
+        project = TestUtil.builder(temporaryFolder.testDirectory).withName("project").build()
+        child1 = ProjectBuilder.builder().withName("child1").withParent(project).build()
+        child2 = ProjectBuilder.builder().withName("child2").withParent(project).build()
         [project, child1, child2].each { it.pluginManager.apply(EclipsePlugin.class) }
     }
 
@@ -292,10 +295,10 @@ class EclipseModelBuilderTest extends Specification {
     }
 
     private def createEclipseModelBuilder() {
-        def gradleProjectBuilder = Mock(GradleProjectBuilder)
-        gradleProjectBuilder.buildAll(_) >> Mock(DefaultGradleProject)
+        def gradleProjectBuilder = new GradleProjectBuilder()
         def serviceRegistry = new DefaultServiceRegistry()
         serviceRegistry.add(LocalComponentRegistry, Stub(LocalComponentRegistry))
+        serviceRegistry.add(CompositeBuildContext, Stub(CompositeBuildContext))
         new EclipseModelBuilder(gradleProjectBuilder, serviceRegistry)
     }
 }

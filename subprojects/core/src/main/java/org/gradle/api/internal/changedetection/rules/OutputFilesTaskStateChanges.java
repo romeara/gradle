@@ -17,23 +17,21 @@
 package org.gradle.api.internal.changedetection.rules;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.hash.HashCode;
-import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.TaskInternal;
 import org.gradle.api.internal.changedetection.state.FileCollectionSnapshot;
-import org.gradle.api.internal.changedetection.state.FileCollectionSnapshot.ChangeFilter;
-import org.gradle.api.internal.changedetection.state.OutputFilesCollectionSnapshotter;
+import org.gradle.api.internal.changedetection.state.FileCollectionSnapshotterRegistry;
+import org.gradle.api.internal.changedetection.state.OutputFilesSnapshotter;
 import org.gradle.api.internal.changedetection.state.TaskExecution;
+import org.gradle.api.internal.tasks.TaskFilePropertySpec;
 
-import java.util.EnumSet;
 import java.util.Map;
-import java.util.Set;
 
 public class OutputFilesTaskStateChanges extends AbstractNamedFileSnapshotTaskStateChanges {
-    private static final EnumSet<ChangeFilter> IGNORE_ADDED_FILES = EnumSet.of(ChangeFilter.IgnoreAddedFiles);
+    private final OutputFilesSnapshotter outputSnapshotter;
 
-    public OutputFilesTaskStateChanges(TaskExecution previous, TaskExecution current, TaskInternal task, OutputFilesCollectionSnapshotter snapshotter) {
-        super(task.getName(), previous, current, snapshotter, false, "Output", task.getOutputs().getFileProperties());
+    public OutputFilesTaskStateChanges(TaskExecution previous, TaskExecution current, TaskInternal task, FileCollectionSnapshotterRegistry snapshotterRegistry, OutputFilesSnapshotter outputSnapshotter) {
+        super(task.getName(), previous, current, snapshotterRegistry, "Output", task.getOutputs().getFileProperties());
+        this.outputSnapshotter = outputSnapshotter;
     }
 
     @Override
@@ -42,33 +40,20 @@ public class OutputFilesTaskStateChanges extends AbstractNamedFileSnapshotTaskSt
     }
 
     @Override
-    protected HashCode getPreviousPreCheckHash() {
-        return previous.getOutputFilesHash();
-    }
-
-    @Override
-    protected Set<ChangeFilter> getFileChangeFilters() {
-        return IGNORE_ADDED_FILES;
-    }
-
-    @Override
     public void saveCurrent() {
-        PreCheckSet outputFilesAfterPreCheck = buildPreCheckSet();
-        Map<String, FileCollectionSnapshot> outputFilesAfter = buildSnapshots(outputFilesAfterPreCheck);
+        final Map<String, FileCollectionSnapshot> outputFilesAfter = buildSnapshots(getTaskName(), getSnapshotterRegistry(), getTitle(), getFileProperties());
 
         ImmutableMap.Builder<String, FileCollectionSnapshot> builder = ImmutableMap.builder();
-        for (Map.Entry<String, FileCollection> entry : fileProperties.entrySet()) {
-            String propertyName = entry.getKey();
-            FileCollection roots = entry.getValue();
+        for (TaskFilePropertySpec propertySpec : fileProperties) {
+            String propertyName = propertySpec.getPropertyName();
             FileCollectionSnapshot beforeExecution = getCurrent().get(propertyName);
             FileCollectionSnapshot afterExecution = outputFilesAfter.get(propertyName);
             FileCollectionSnapshot afterPreviousExecution = getSnapshotAfterPreviousExecution(propertyName);
-            FileCollectionSnapshot outputSnapshot = getSnapshotter().createOutputSnapshot(afterPreviousExecution, beforeExecution, afterExecution, roots);
+            FileCollectionSnapshot outputSnapshot = outputSnapshotter.createOutputSnapshot(afterPreviousExecution, beforeExecution, afterExecution);
             builder.put(propertyName, outputSnapshot);
         }
 
         current.setOutputFilesSnapshot(builder.build());
-        current.setOutputFilesHash(outputFilesAfterPreCheck.getHash());
     }
 
     private FileCollectionSnapshot getSnapshotAfterPreviousExecution(String propertyName) {
@@ -81,11 +66,6 @@ public class OutputFilesTaskStateChanges extends AbstractNamedFileSnapshotTaskSt
                 }
             }
         }
-        return getSnapshotter().emptySnapshot();
-    }
-
-    @Override
-    protected OutputFilesCollectionSnapshotter getSnapshotter() {
-        return (OutputFilesCollectionSnapshotter) super.getSnapshotter();
+        return FileCollectionSnapshot.EMPTY;
     }
 }

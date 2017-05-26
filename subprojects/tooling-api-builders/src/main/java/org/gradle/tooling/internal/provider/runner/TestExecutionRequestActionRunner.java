@@ -24,7 +24,7 @@ import org.gradle.internal.invocation.BuildActionRunner;
 import org.gradle.internal.invocation.BuildController;
 import org.gradle.tooling.internal.protocol.test.InternalTestExecutionException;
 import org.gradle.tooling.internal.provider.BuildActionResult;
-import org.gradle.tooling.internal.provider.PayloadSerializer;
+import org.gradle.tooling.internal.provider.serialization.PayloadSerializer;
 import org.gradle.tooling.internal.provider.TestExecutionRequestAction;
 
 import java.util.Collections;
@@ -40,7 +40,7 @@ public class TestExecutionRequestActionRunner implements BuildActionRunner {
         try {
             TestExecutionRequestAction testExecutionRequestAction = (TestExecutionRequestAction) action;
             TestExecutionResultEvaluator testExecutionResultEvaluator = new TestExecutionResultEvaluator(testExecutionRequestAction);
-            gradle.addListener(testExecutionResultEvaluator);
+            buildController.addNestedListener(testExecutionResultEvaluator);
             doRun(testExecutionRequestAction, buildController);
             testExecutionResultEvaluator.evaluate();
         } catch (RuntimeException rex) {

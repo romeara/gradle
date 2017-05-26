@@ -16,8 +16,15 @@
 
 package org.gradle.api.internal.artifacts;
 
+import java.util.Map;
+
 public interface DependencyResolveContext {
     boolean isTransitive();
-    
+
+    /**
+     * Accepts either a {@link ResolvableDependency} or {@link org.gradle.api.file.FileCollection}
+     */
     void add(Object dependency);
+
+    Map<String, String> getAttributes();
 }

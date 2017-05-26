@@ -16,18 +16,18 @@
 
 package org.gradle.api.internal.changedetection.state;
 
-import org.gradle.internal.hash.HashValue;
+import com.google.common.base.Objects;
+import com.google.common.hash.HashCode;
 
-class FileHashSnapshot implements IncrementalFileSnapshot, FileSnapshot {
-    final HashValue hash;
-    final transient long lastModified; // Currently not persisted
+class FileHashSnapshot implements IncrementalFileSnapshot {
+    private final HashCode hash;
+    private final transient long lastModified; // Currently not persisted
 
-    public FileHashSnapshot(HashValue hash) {
-        this.hash = hash;
-        this.lastModified = 0;
+    public FileHashSnapshot(HashCode hash) {
+        this(hash, 0L);
     }
 
-    public FileHashSnapshot(HashValue hash, long lastModified) {
+    public FileHashSnapshot(HashCode hash, long lastModified) {
         this.hash = hash;
         this.lastModified = lastModified;
     }
@@ -37,7 +37,7 @@ class FileHashSnapshot implements IncrementalFileSnapshot, FileSnapshot {
             return false;
         }
         FileHashSnapshot other = (FileHashSnapshot) snapshot;
-        return hash.equals(other.hash);
+        return Objects.equal(hash, other.hash);
     }
 
     @Override
@@ -46,15 +46,33 @@ class FileHashSnapshot implements IncrementalFileSnapshot, FileSnapshot {
             return false;
         }
         FileHashSnapshot other = (FileHashSnapshot) snapshot;
-        return lastModified == other.lastModified && hash.equals(other.hash);
+        return lastModified == other.lastModified && Objects.equal(hash, other.hash);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        FileHashSnapshot that = (FileHashSnapshot) o;
+        return Objects.equal(hash, that.hash);
+    }
+
+    @Override
+    public int hashCode() {
+        return hash.hashCode();
     }
 
     @Override
     public String toString() {
-        return hash.asHexString();
+        return hash.toString();
     }
 
-    public HashValue getHash() {
+    @Override
+    public HashCode getHash() {
         return hash;
     }
 }

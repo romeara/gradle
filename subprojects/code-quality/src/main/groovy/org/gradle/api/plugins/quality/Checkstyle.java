@@ -20,17 +20,22 @@ import groovy.lang.DelegatesTo;
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.internal.ClosureBackedAction;
 import org.gradle.api.internal.project.IsolatedAntBuilder;
 import org.gradle.api.plugins.quality.internal.CheckstyleInvoker;
 import org.gradle.api.plugins.quality.internal.CheckstyleReportsImpl;
 import org.gradle.api.reporting.Reporting;
 import org.gradle.api.resources.TextResource;
+import org.gradle.api.tasks.CacheableTask;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Console;
 import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Nested;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SourceTask;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.VerificationTask;
@@ -44,8 +49,8 @@ import java.util.Map;
 /**
  * Runs Checkstyle against some source files.
  */
+@CacheableTask
 public class Checkstyle extends SourceTask implements VerificationTask, Reporting<CheckstyleReports> {
-
 
     private FileCollection checkstyleClasspath;
     private FileCollection classpath;
@@ -53,6 +58,8 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
     private Map<String, Object> configProperties = new LinkedHashMap<String, Object>();
     private final CheckstyleReports reports;
     private boolean ignoreFailures;
+    private int maxErrors;
+    private int maxWarnings = Integer.MAX_VALUE;
     private boolean showViolations = true;
 
 
@@ -100,13 +107,11 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
      * }
      * </pre>
      *
-     * @deprecated Use {@link Checkstyle#reports(Action)} instead
      * @param closure The configuration
      * @return The reports container
      */
-    @Deprecated
     public CheckstyleReports reports(@DelegatesTo(value=CheckstyleReports.class, strategy = Closure.DELEGATE_FIRST) Closure closure) {
-        return (CheckstyleReports) reports.configure(closure);
+        return reports(new ClosureBackedAction<CheckstyleReports>(closure));
     }
 
     /**
@@ -129,7 +134,6 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
      * @return The reports container
      */
     public CheckstyleReports reports(Action<? super CheckstyleReports> configureAction) {
-        CheckstyleReports reports = this.reports;
         configureAction.execute(reports);
         return reports;
     }
@@ -140,9 +144,24 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
     }
 
     /**
+     * {@inheritDoc}
+     *
+     * <p>The sources for this task are relatively relocatable even though it produces output that
+     * includes absolute paths. This is a compromise made to ensure that results can be reused
+     * between different builds. The downside is that up-to-date results, or results loaded
+     * from cache can show different absolute paths than would be produced if the task was
+     * executed.</p>
+     */
+    @Override
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public FileTree getSource() {
+        return super.getSource();
+    }
+
+    /**
      * The class path containing the Checkstyle library to be used.
      */
-    @InputFiles
+    @Classpath
     public FileCollection getCheckstyleClasspath() {
         return checkstyleClasspath;
     }
@@ -154,7 +173,7 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
     /**
      * The class path containing the compiled classes for the source files to be analyzed.
      */
-    @InputFiles
+    @Classpath
     public FileCollection getClasspath() {
         return classpath;
     }
@@ -223,13 +242,33 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
     }
 
     /**
-     * Whether or not rule violations are to be displayed on the console.
+     * The maximum number of errors that are tolerated before breaking the build
+     * or setting the failure property.
      *
-     * @return true if violations should be displayed on console
+     * @return the maximum number of errors allowed
      */
-    @Console
-    public boolean getShowViolations() {
-        return showViolations;
+    @Input
+    public int getMaxErrors() {
+        return maxErrors;
+    }
+
+    public void setMaxErrors(int maxErrors) {
+        this.maxErrors = maxErrors;
+    }
+
+    /**
+     * The maximum number of warnings that are tolerated before breaking the build
+     * or setting the failure property.
+     *
+     * @return the maximum number of warnings allowed
+     */
+    @Input
+    public int getMaxWarnings() {
+        return maxWarnings;
+    }
+
+    public void setMaxWarnings(int maxWarnings) {
+        this.maxWarnings = maxWarnings;
     }
 
     /**
@@ -237,6 +276,7 @@ public class Checkstyle extends SourceTask implements VerificationTask, Reportin
      *
      * @return true if violations should be displayed on console
      */
+    @Console
     public boolean isShowViolations() {
         return showViolations;
     }

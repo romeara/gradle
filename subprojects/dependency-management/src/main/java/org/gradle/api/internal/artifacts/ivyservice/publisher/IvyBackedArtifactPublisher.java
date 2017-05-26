@@ -21,11 +21,14 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier;
 import org.gradle.api.internal.artifacts.ArtifactPublisher;
 import org.gradle.api.internal.artifacts.Module;
 import org.gradle.api.internal.artifacts.ModuleVersionPublisher;
+import org.gradle.api.internal.artifacts.configurations.ConfigurationInternal;
 import org.gradle.api.internal.artifacts.ivyservice.moduleconverter.ConfigurationComponentMetaDataBuilder;
 import org.gradle.api.internal.artifacts.repositories.PublicationAwareRepository;
+import org.gradle.internal.Cast;
 import org.gradle.internal.component.external.model.BuildableIvyModulePublishMetadata;
 import org.gradle.internal.component.external.model.DefaultIvyModulePublishMetadata;
 import org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier;
+import org.gradle.internal.component.external.model.IvyModuleArtifactPublishMetadata;
 import org.gradle.internal.component.external.model.IvyModulePublishMetadata;
 import org.gradle.internal.component.model.DefaultIvyArtifactName;
 import org.gradle.internal.component.model.IvyArtifactName;
@@ -49,13 +52,14 @@ public class IvyBackedArtifactPublisher implements ArtifactPublisher {
     }
 
     public void publish(final Iterable<? extends PublicationAwareRepository> repositories, final Module module, final Configuration configuration, final File descriptor) throws PublishException {
-        Set<Configuration> allConfigurations = configuration.getAll();
-        Set<Configuration> configurationsToPublish = configuration.getHierarchy();
+        Set<ConfigurationInternal> allConfigurations = Cast.uncheckedCast(configuration.getAll());
+        Set<ConfigurationInternal> configurationsToPublish = Cast.uncheckedCast(configuration.getHierarchy());
 
         if (descriptor != null) {
             // Convert once, in order to write the Ivy descriptor with _all_ configurations
             IvyModulePublishMetadata publishMetaData = toPublishMetaData(module, allConfigurations);
-            ivyModuleDescriptorWriter.write(publishMetaData.getModuleDescriptor(), publishMetaData.getArtifacts(), descriptor);
+            validatePublishMetaData(publishMetaData);
+            ivyModuleDescriptorWriter.write(publishMetaData, descriptor);
         }
 
         // Convert a second time with only the published configurations: this ensures that the correct artifacts are included
@@ -74,7 +78,15 @@ public class IvyBackedArtifactPublisher implements ArtifactPublisher {
         dependencyPublisher.publish(publishResolvers, publishMetaData);
     }
 
-    private BuildableIvyModulePublishMetadata toPublishMetaData(Module module, Set<? extends Configuration> configurations) {
+    private void validatePublishMetaData(IvyModulePublishMetadata publishMetaData) {
+        for (IvyModuleArtifactPublishMetadata metadata : publishMetaData.getArtifacts()) {
+            if (metadata.getFile().isDirectory()) {
+                throw new IllegalArgumentException("Cannot publish a directory (" + metadata.getFile() + ")");
+            }
+        }
+    }
+
+    private BuildableIvyModulePublishMetadata toPublishMetaData(Module module, Set<? extends ConfigurationInternal> configurations) {
         ModuleComponentIdentifier id = DefaultModuleComponentIdentifier.newId(module.getGroup(), module.getName(), module.getVersion());
         DefaultIvyModulePublishMetadata publishMetaData = new DefaultIvyModulePublishMetadata(id, module.getStatus());
         configurationComponentMetaDataBuilder.addConfigurations(publishMetaData, configurations);

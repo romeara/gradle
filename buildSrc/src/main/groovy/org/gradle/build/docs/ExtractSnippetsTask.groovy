@@ -15,21 +15,32 @@
  */
 package org.gradle.build.docs
 
+import org.gradle.api.file.FileTree
+import org.gradle.api.file.FileVisitDetails
+import org.gradle.api.tasks.CacheableTask
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.SourceTask
+import org.gradle.api.tasks.TaskAction
+
 import java.util.regex.Matcher
 import java.util.regex.Pattern
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.SourceTask
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.file.FileVisitDetails
-
 /**
  * Produces the snippets files for a set of sample source files.
  */
+@CacheableTask
 public class ExtractSnippetsTask extends SourceTask {
     @OutputDirectory
     File destDir
     @OutputDirectory
     File snippetsDir
+
+    @Override
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public FileTree getSource() {
+        return super.getSource()
+    }
 
     @TaskAction
     def extract() {
@@ -99,48 +110,5 @@ public class ExtractSnippetsTask extends SourceTask {
                 }
             }
         }
-    }
-}
-
-class SnippetWriter {
-
-    private final File dest
-    private final String displayName
-    private boolean appendToFile
-    private PrintWriter writer
-
-    def SnippetWriter(String displayName, File dest) {
-        this.dest = dest
-        this.displayName = displayName
-    }
-
-    def start() {
-        if (writer) {
-            throw new RuntimeException("$displayName is already started.")
-        }
-        dest.parentFile.mkdirs()
-        writer = new PrintWriter(dest.newWriter(appendToFile), false)
-        appendToFile = true
-        this
-    }
-
-    def println(String line) {
-        if (writer) {
-            writer.println(line)
-        }
-    }
-
-    def end() {
-        if (!writer) {
-            throw new RuntimeException("$displayName was not started.")
-        }
-        close()
-    }
-
-    def close() {
-        if (writer) {
-            writer.close()
-        }
-        writer = null
     }
 }

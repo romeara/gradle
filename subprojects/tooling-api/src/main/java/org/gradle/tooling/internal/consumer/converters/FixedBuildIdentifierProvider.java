@@ -16,35 +16,34 @@
 
 package org.gradle.tooling.internal.consumer.converters;
 
-import org.gradle.api.Action;
-import org.gradle.tooling.model.BuildIdentifier;
-import org.gradle.tooling.model.ProjectIdentifier;
-import org.gradle.tooling.internal.adapter.MethodInvocation;
-import org.gradle.tooling.internal.adapter.MethodInvoker;
-import org.gradle.tooling.internal.adapter.SourceObjectMapping;
+import org.gradle.tooling.internal.adapter.ViewBuilder;
+import org.gradle.tooling.internal.gradle.DefaultBuildIdentifier;
+import org.gradle.tooling.internal.gradle.DefaultProjectIdentifier;
+import org.gradle.tooling.model.BuildModel;
+import org.gradle.tooling.model.ProjectModel;
 
 import java.io.Serializable;
 
-public class FixedBuildIdentifierProvider implements MethodInvoker, Serializable, Action<SourceObjectMapping> {
-    private final BuildIdentifier buildIdentifier;
-    private final ProjectIdentifier projectIdentifier;
+public class FixedBuildIdentifierProvider implements Serializable {
+    private final DefaultBuildIdentifier buildIdentifier;
+    private final DefaultProjectIdentifier projectIdentifier;
 
-    public FixedBuildIdentifierProvider(ProjectIdentifier projectIdentifier) {
+    public FixedBuildIdentifierProvider(DefaultProjectIdentifier projectIdentifier) {
         this.buildIdentifier = projectIdentifier.getBuildIdentifier();
         this.projectIdentifier = projectIdentifier;
     }
 
-    public void invoke(MethodInvocation invocation) throws Throwable {
-        if (BuildIdentifier.class.isAssignableFrom(invocation.getReturnType())) {
-            invocation.setResult(buildIdentifier);
-        }
-        if (ProjectIdentifier.class.isAssignableFrom(invocation.getReturnType())) {
-            invocation.setResult(projectIdentifier);
-        }
+    public DefaultBuildIdentifier getBuildIdentifier() {
+        return buildIdentifier;
     }
 
-    @Override
-    public void execute(SourceObjectMapping sourceObjectMapping) {
-        sourceObjectMapping.mixIn(this);
+    public DefaultProjectIdentifier getProjectIdentifier() {
+        return projectIdentifier;
+    }
+
+    public <T> ViewBuilder<T> applyTo(ViewBuilder<T> builder) {
+        builder.mixInTo(BuildModel.class, this);
+        builder.mixInTo(ProjectModel.class, this);
+        return builder;
     }
 }

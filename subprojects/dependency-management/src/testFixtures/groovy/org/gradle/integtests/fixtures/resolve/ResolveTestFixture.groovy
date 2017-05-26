@@ -15,13 +15,20 @@
  */
 
 package org.gradle.integtests.fixtures.resolve
+
+import com.google.common.base.Joiner
 import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.result.ComponentSelectionReason
 import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier
 import org.gradle.api.tasks.TaskAction
 import org.gradle.internal.classloader.ClasspathUtil
 import org.gradle.test.fixtures.file.TestFile
+import org.junit.Assert
+
 /**
  * A test fixture that injects a task into a build that resolves a dependency configuration and does some validation of the resulting graph, to
  * ensure that the old and new dependency graphs plus the artifacts and files are as expected and well-formed.
@@ -76,41 +83,129 @@ allprojects {
         def configDetailsFile = buildFile.parentFile.file("build/${config}.txt")
         def configDetails = configDetailsFile.text.readLines()
 
-        def actualRoot = configDetails.find { it.startsWith('root:') }.substring(5)
-        def expectedRoot = "[id:${graph.root.id}][mv:${graph.root.moduleVersionId}][reason:${graph.root.reason}]"
+        def actualRoot = findLines(configDetails, 'root').first()
+        def expectedRoot = "[id:${graph.root.id}][mv:${graph.root.moduleVersionId}][reason:${graph.root.reason}]".toString()
         assert actualRoot == expectedRoot
 
-        def actualFirstLevel = configDetails.findAll { it.startsWith('first-level:') }.collect { it.substring(12) }
-        def expectedFirstLevel = graph.root.deps.collect { "[${it.selected.moduleVersionId}:${it.selected.configuration}]" }
-        assert actualFirstLevel as Set == expectedFirstLevel as Set
+        def expectedFirstLevel = graph.root.deps.collect { "[${it.selected.moduleVersionId}:${it.selected.configuration}]" } as Set
 
-        def actualNodes = configDetails.findAll { it.startsWith('component:') }.collect { it.substring(10) }
-        def expectedNodes = graph.nodes.values().collect { "[id:${it.id}][mv:${it.moduleVersionId}][reason:${it.reason}]" }
-        assert actualNodes as Set == expectedNodes as Set
+        def actualFirstLevel = findLines(configDetails, 'first-level')
+        compare("first level dependencies", actualFirstLevel, expectedFirstLevel)
 
-        def actualEdges = configDetails.findAll { it.startsWith('dependency:') }.collect { it.substring(11) }
+        actualFirstLevel = findLines(configDetails, 'first-level-filtered')
+        compare("filtered first level dependencies", actualFirstLevel, expectedFirstLevel)
+
+        actualFirstLevel = findLines(configDetails, 'lenient-first-level')
+        compare("lenient first level dependencies", actualFirstLevel, expectedFirstLevel)
+
+        actualFirstLevel = findLines(configDetails, 'lenient-first-level-filtered')
+        compare("lenient filtered first level dependencies", actualFirstLevel, expectedFirstLevel)
+
+        def actualConfigurations = findLines(configDetails, 'configuration') as Set
+        def expectedConfigurations = graph.nodesWithoutRoot.collect { "[${it.moduleVersionId}]" }
+        compare("configurations in graph", actualConfigurations, expectedConfigurations)
+
+        def actualComponents = findLines(configDetails, 'component')
+        def expectedComponents = graph.nodes.collect { "[id:${it.id}][mv:${it.moduleVersionId}][reason:${it.reason}]" }
+        compare("components in graph", actualComponents, expectedComponents)
+
+        def actualEdges = findLines(configDetails, 'dependency')
         def expectedEdges = graph.edges.collect { "[from:${it.from.id}][${it.requested}->${it.selected.id}]" }
-        assert actualEdges as Set == expectedEdges as Set
+        compare("edges in graph", actualEdges, expectedEdges)
 
-        def actualArtifacts = configDetails.findAll { it.startsWith('artifact:') }.collect { it.substring(9) }
-        def expectedArtifacts = graph.artifactNodes.collect { "[${it.moduleVersionId}][${it.module}.jar]" }
-        assert actualArtifacts as Set == expectedArtifacts as Set
+        def expectedArtifacts = graph.artifactNodes.collect { "[${it.moduleVersionId}][${it.artifactName}]" }
+
+        def actualArtifacts = findLines(configDetails, 'artifact')
+        compare("artifacts", actualArtifacts, expectedArtifacts)
+
+        actualArtifacts = findLines(configDetails, 'lenient-artifact')
+        compare("lenient artifacts", actualArtifacts, expectedArtifacts)
+
+        actualArtifacts = findLines(configDetails, 'filtered-lenient-artifact')
+        compare("filtered lenient artifacts", actualArtifacts, expectedArtifacts)
 
         if (buildArtifacts) {
-            def actualFiles = configDetails.findAll { it.startsWith('file:') }.collect { it.substring(5) }
-            def expectedFiles = graph.artifactNodes.collect { it.fileName }
-            assert actualFiles as Set == expectedFiles as Set
+            def expectedFiles = graph.root.files + graph.artifactNodes.collect { it.fileName }
+
+            def actualFiles = findLines(configDetails, 'file')
+            compare("files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-incoming')
+            compare("incoming.files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-artifact-incoming')
+            compare("incoming.artifacts", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-filtered')
+            compare("filtered files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-collection-filtered')
+            compare("filtered FileCollection", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-resolved-config')
+            compare("resolved configuration files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-resolved-config-filtered')
+            compare("resolved configuration filtered files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-lenient-config')
+            compare("lenient configuration files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-lenient-config-filtered')
+            compare("lenient configuration filtered files", actualFiles, expectedFiles)
+
+            // The following do not include file dependencies
+            expectedFiles = graph.artifactNodes.collect { it.fileName }
+
+            actualFiles = findLines(configDetails, 'file-artifact-resolved-config')
+            compare("resolved configuration artifact files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-artifact-lenient-config')
+            compare("lenient configuration artifact files", actualFiles, expectedFiles)
+
+            actualFiles = findLines(configDetails, 'file-artifact-lenient-config-filtered')
+            compare("filtered lenient configuration artifact files", actualFiles, expectedFiles)
         }
     }
 
-    public static class GraphBuilder {
-        final Map<String, NodeBuilder> nodes = new LinkedHashMap<>()
-        NodeBuilder root
+    List<String> findLines(List<String> lines, String prefix) {
+        return lines.findAll { it.startsWith(prefix + ":") }.collect { it.substring(prefix.length() + 1) }
+    }
 
-        private getArtifactNodes() {
+    void compare(String compType, Collection<String> actual, Collection<String> expected) {
+        def actualFormatted = Joiner.on("\n").join(new ArrayList<String>(actual).sort())
+        def expectedFormatted = Joiner.on("\n").join(new ArrayList<String>(expected).sort())
+        Assert.assertEquals("Result contains unexpected $compType", expectedFormatted, actualFormatted)
+    }
+
+    static class GraphBuilder {
+        private final Map<String, NodeBuilder> nodes = new LinkedHashMap<>()
+        private NodeBuilder root
+
+        Collection<NodeBuilder> getNodes() {
+            return nodes.values()
+        }
+
+        Collection<NodeBuilder> getNodesWithoutRoot() {
+            def nodes = new HashSet<>()
+            visitDeps(root.deps, nodes, new HashSet<>())
+            return nodes
+        }
+
+        private void visitDeps(List<EdgeBuilder> edges, Set<NodeBuilder> nodes, Set<NodeBuilder> seen) {
+            for (EdgeBuilder edge : edges) {
+                def selected = edge.selected
+                if (seen.add(selected)) {
+                    nodes.add(selected)
+                    visitDeps(selected.deps, nodes, seen)
+                }
+            }
+        }
+
+        Set<ExpectedArtifact> getArtifactNodes() {
             Set<NodeBuilder> result = new LinkedHashSet()
             visitNodes(root, result)
-            return result
+            return result.collect { it.artifacts }.flatten()
         }
 
         private void visitNodes(NodeBuilder node, Set<NodeBuilder> result) {
@@ -158,12 +253,15 @@ allprojects {
 
         /**
          * Defines the root node of the graph. The closure delegates to a {@link NodeBuilder} instance that represents the root node.
+         *
+         * @param projectPath The path of the project to which the graph belongs.
+         * @param moduleVersion The module version for this project.
          */
-        def root(String path, String value, @DelegatesTo(NodeBuilder) Closure cl) {
+        def root(String projectPath, String moduleVersion, @DelegatesTo(NodeBuilder) Closure cl) {
             if (root != null) {
                 throw new IllegalStateException("Root node is already defined")
             }
-            root = node("project $path", value)
+            root = node("project $projectPath", moduleVersion)
             cl.resolveStrategy = Closure.DELEGATE_ONLY
             cl.delegate = root
             cl.call()
@@ -188,7 +286,7 @@ allprojects {
             } else {
                 def parts = moduleVersionId.split(':')
                 assert parts.length == 3
-                attrs = [group: parts[1], module: parts[1], version: parts[2]]
+                attrs = [group: parts[0], module: parts[1], version: parts[2]]
             }
             return node(id, moduleVersionId, attrs)
         }
@@ -203,7 +301,7 @@ allprojects {
         }
     }
 
-    public static class EdgeBuilder {
+    static class EdgeBuilder {
         final String requested
         final NodeBuilder from
         NodeBuilder selected
@@ -220,7 +318,36 @@ allprojects {
         }
     }
 
-    public static class NodeBuilder {
+    static class ExpectedArtifact {
+        String group
+        String module
+        String version
+        String classifier
+        String type
+        String name
+
+        String getType() {
+            return type ?: 'jar'
+        }
+
+        String getName() {
+            return name ?: module
+        }
+
+        ModuleVersionIdentifier getModuleVersionId() {
+            return DefaultModuleVersionIdentifier.newId(group, module, version ?: 'unspecified')
+        }
+
+        String getArtifactName() {
+            return "${getName()}${classifier ? '-' + classifier : ''}.${getType()}"
+        }
+
+        String getFileName() {
+            return "${getName()}${version ? '-' + version : ''}${classifier ? '-' + classifier : ''}.${getType()}"
+        }
+    }
+
+    static class NodeBuilder {
         final List<EdgeBuilder> deps = []
         private final GraphBuilder graph
         final String id
@@ -229,7 +356,10 @@ allprojects {
         final String module
         final String version
         String configuration = "default"
-        private Set<String> reasons = new TreeSet<String>()
+        private boolean implicitArtifact = true
+        final List<String> files = []
+        private final Set<ExpectedArtifact> artifacts = new LinkedHashSet<>()
+        private final Set<String> reasons = new TreeSet<String>()
 
         NodeBuilder(String id, String moduleVersionId, Map attrs, GraphBuilder graph) {
             this.graph = graph
@@ -240,12 +370,12 @@ allprojects {
             this.id = id
         }
 
-        def getReason() {
-            reasons.empty ? (this == graph.root ? 'root' : 'requested') : reasons.join(',')
+        Set<ExpectedArtifact> getArtifacts() {
+            return artifacts.empty && implicitArtifact ? [new ExpectedArtifact(group: group, module: module, version: version)] : artifacts
         }
 
-        private def getFileName() {
-            "$module${version ? '-' + version : ''}.jar"
+        String getReason() {
+            reasons.empty ? (this == graph.root ? 'root' : 'requested') : reasons.join(',')
         }
 
         private NodeBuilder addNode(String id, String moduleVersionId = id) {
@@ -325,6 +455,23 @@ allprojects {
         }
 
         /**
+         * Specifies that this node has no artifacts associated with it.
+         */
+        NodeBuilder noArtifacts() {
+            implicitArtifact = false
+            return this
+        }
+
+        /**
+         * Specifies an artifact for this node. A default is assumed when none specified
+         */
+        NodeBuilder artifact(Map attributes) {
+            def artifact = new ExpectedArtifact(group: group, module: module, version: version, name: attributes.name, classifier: attributes.classifier, type: attributes.type)
+            artifacts << artifact
+            return this
+        }
+
+        /**
          * Marks that this node was selected due to conflict resolution.
          */
         NodeBuilder byConflictResolution() {
@@ -358,7 +505,7 @@ allprojects {
     }
 }
 
-public class GenerateGraphTask extends DefaultTask {
+class GenerateGraphTask extends DefaultTask {
     File outputFile
     Configuration configuration
     boolean buildArtifacts
@@ -371,9 +518,17 @@ public class GenerateGraphTask extends DefaultTask {
             configuration.resolvedConfiguration.firstLevelModuleDependencies.each {
                 writer.println("first-level:[${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}:${it.configuration}]")
             }
-            configuration.resolvedConfiguration.resolvedArtifacts.each {
-                writer.println("artifact:[${it.moduleVersion.id}][${it.name}${it.classifier ? "-" + it.classifier : ""}.${it.extension}]")
+            configuration.resolvedConfiguration.getFirstLevelModuleDependencies { true }.each {
+                writer.println("first-level-filtered:[${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}:${it.configuration}]")
             }
+            configuration.resolvedConfiguration.lenientConfiguration.firstLevelModuleDependencies.each {
+                writer.println("lenient-first-level:[${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}:${it.configuration}]")
+            }
+            configuration.resolvedConfiguration.lenientConfiguration.getFirstLevelModuleDependencies { true }.each {
+                writer.println("lenient-first-level-filtered:[${it.moduleGroup}:${it.moduleName}:${it.moduleVersion}:${it.configuration}]")
+            }
+            visitNodes(configuration.resolvedConfiguration.firstLevelModuleDependencies, writer, new HashSet<>())
+
             def root = configuration.incoming.resolutionResult.root
             writer.println("root:${formatComponent(root)}")
             configuration.incoming.resolutionResult.allComponents.each {
@@ -386,7 +541,60 @@ public class GenerateGraphTask extends DefaultTask {
                 configuration.files.each {
                     writer.println("file:${it.name}")
                 }
+                configuration.incoming.files.each {
+                    writer.println("file-incoming:${it.name}")
+                }
+                configuration.incoming.artifacts.each {
+                    writer.println("file-artifact-incoming:${it.file.name}")
+                }
+                configuration.files { true }.each {
+                    writer.println("file-filtered:${it.name}")
+                }
+                configuration.fileCollection { true }.each {
+                    writer.println("file-collection-filtered:${it.name}")
+                }
+                configuration.resolvedConfiguration.files.each {
+                    writer.println("file-resolved-config:${it.name}")
+                }
+                configuration.resolvedConfiguration.getFiles { true }.each {
+                    writer.println("file-resolved-config-filtered:${it.name}")
+                }
+                configuration.resolvedConfiguration.resolvedArtifacts.each {
+                    writer.println("file-artifact-resolved-config:${it.file.name}")
+                }
+                configuration.resolvedConfiguration.lenientConfiguration.files.each {
+                    writer.println("file-lenient-config:${it.name}")
+                }
+                configuration.resolvedConfiguration.lenientConfiguration.getFiles { true }.each {
+                    writer.println("file-lenient-config-filtered:${it.name}")
+                }
+                configuration.resolvedConfiguration.lenientConfiguration.artifacts.each {
+                    writer.println("file-artifact-lenient-config:${it.file.name}")
+                }
+                configuration.resolvedConfiguration.lenientConfiguration.getArtifacts { true }.each {
+                    writer.println("file-artifact-lenient-config-filtered:${it.file.name}")
+                }
             }
+
+            configuration.resolvedConfiguration.resolvedArtifacts.each {
+                writer.println("artifact:[${it.moduleVersion.id}][${it.name}${it.classifier ? "-" + it.classifier : ""}.${it.extension}]")
+            }
+            configuration.resolvedConfiguration.lenientConfiguration.artifacts.each {
+                writer.println("lenient-artifact:[${it.moduleVersion.id}][${it.name}${it.classifier ? "-" + it.classifier : ""}.${it.extension}]")
+            }
+            configuration.resolvedConfiguration.lenientConfiguration.getArtifacts { true }.each {
+                writer.println("filtered-lenient-artifact:[${it.moduleVersion.id}][${it.name}${it.classifier ? "-" + it.classifier : ""}.${it.extension}]")
+            }
+        }
+    }
+
+    def visitNodes(Collection<ResolvedDependency> nodes, PrintWriter writer, Set<ResolvedDependency> visited) {
+        for (ResolvedDependency node : nodes) {
+            if (!visited.add(node)) {
+                continue
+            }
+            writer.println("configuration:[${node.moduleGroup}:${node.moduleName}:${node.moduleVersion}]")
+            visitNodes(node.children, writer, visited)
         }
     }
 

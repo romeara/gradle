@@ -24,13 +24,13 @@ import spock.lang.Specification
 public class ClasspathTest extends Specification {
     final fileReferenceFactory = new FileReferenceFactory()
     final customEntries = [
-            new ProjectDependency("/test2", null),
-            new Container("org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"),
-            new Library(fileReferenceFactory.fromPath("/apache-ant-1.7.1/lib/ant-antlr.jar")),
-            new SourceFolder("src", "bin2"),
-            new Variable(fileReferenceFactory.fromVariablePath("GRADLE_CACHE/ant-1.6.5.jar")),
-            new Container("org.eclipse.jdt.USER_LIBRARY/gradle"),
-            new Output("bin")]
+        new ProjectDependency("/test2"),
+        new Container("org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"),
+        new Library(fileReferenceFactory.fromPath("/apache-ant-1.7.1/lib/ant-antlr.jar")),
+        new SourceFolder("src", "bin2"),
+        new Variable(fileReferenceFactory.fromVariablePath("GRADLE_CACHE/ant-1.6.5.jar")),
+        new Container("org.eclipse.jdt.USER_LIBRARY/gradle"),
+        new Output("bin")]
     final projectDependency = [customEntries[0]]
     final jreContainer = [customEntries[1]]
 
@@ -42,7 +42,7 @@ public class ClasspathTest extends Specification {
     public TestNameTestDirectoryProvider tmpDir = new TestNameTestDirectoryProvider()
 
     def setup() {
-
+        fileReferenceFactory.addPathVariable("USER_LIB_PATH", new File('/user/lib/path'))
     }
 
     def "load from reader"() {
@@ -86,6 +86,45 @@ public class ClasspathTest extends Specification {
 
         then:
         classpath == other
+    }
+
+    def "create file reference from string"() {
+        when:
+        FileReference reference = classpath.fileReference(path)
+
+        then:
+        reference.path == path
+        reference.relativeToPathVariable == isRelative
+
+        where:
+        path                 | isRelative
+        '/simple/path'       | false
+        'USER_LIB_PATH/file' | true
+    }
+
+    def 'create file reference from file'() {
+        when:
+        FileReference reference = classpath.fileReference(new File(path))
+
+        then:
+        reference.path.contains(expectedPath) // c: prefix on windows
+        reference.relativeToPathVariable == isRelative
+
+        where:
+        path                  | expectedPath         | isRelative
+        '/simple/path'        | '/simple/path'       | false
+        '/user/lib/path/file' | 'USER_LIB_PATH/file' | true
+    }
+
+    def 'invalid file reference creation'() {
+        when:
+        classpath.fileReference(arg)
+
+        then:
+        thrown RuntimeException
+
+        where:
+        arg << [null, 42]
     }
 
     private InputStream getCustomClasspathReader() {

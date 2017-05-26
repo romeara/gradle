@@ -93,8 +93,7 @@ idea {
                 gradleSettings.appendNode('option', [name: 'SDK_HOME', value: gradle.gradleHomeDir.absolutePath])
 
                 // set compiler heap space
-                def javacSettings = node.appendNode('component', [name: 'JavacSettings'])
-                javacSettings.appendNode('option', [name: 'MAXIMUM_HEAP_SIZE', value: "256"])
+                compilerConfig.appendNode('option', [name: 'BUILD_PROCESS_HEAP_SIZE', value: '2048'])
 
                 // Nullability annotations
                 def nullableManager = node.component.find { it.'@name' == 'NullableNotNullManager' }
@@ -183,8 +182,23 @@ idea {
                 '''))
 
                 node.append(new NodeBuilder().component(name: 'FrameworkDetectionExcludesConfiguration') {
+                  type(id: 'android')
                   type(id: 'web')
                 })
+
+                def buildSrcModuleFile = 'buildSrc/buildSrc.iml'
+                if (file(buildSrcModuleFile).exists()) {
+                    def projects = node.component.find { it.@name == 'ProjectModuleManager' }
+                    if (projects) {
+                        def buildSrc = projects.modules.module.find { it.@filepath.contains('buildSrc') }
+                        if (!buildSrc) {
+                            projects.modules.find().appendNode('module', [
+                                fileurl: "file://\$PROJECT_DIR\$/${buildSrcModuleFile}",
+                                filepath: "\$PROJECT_DIR\$/${buildSrcModuleFile}"
+                            ])
+                        }
+                    }
+                }
             }
         }
     }
@@ -207,17 +221,16 @@ idea {
 
         def docsProject = project(":docs")
         def defaultTestVmParams = [
-                "-Dorg.gradle.docs.releasenotes.source=${docsProject.releaseNotesMarkdown.source.singleFile}",
+                "-Dorg.gradle.docs.releasenotes.source=${docsProject.releaseNotesMarkdown.markdownFile}",
                 "-Dorg.gradle.docs.releasenotes.rendered=${new File(docsProject.releaseNotes.destinationDir, docsProject.releaseNotes.fileName)}",
                 "-DintegTest.gradleHomeDir=${rootProject.intTestImage.destinationDir.absolutePath}",
                 "-DintegTest.gradleUserHomeDir=${rootProject.file('intTestHomeDir').absolutePath}",
                 "-DintegTest.libsRepo=${rootProject.file('build/repo').absolutePath}",
                 "-Dorg.gradle.integtest.daemon.registry=${rootProject.file('build/daemon').absolutePath}",
                 "-DintegTest.distsDir=${rootProject.distsDir.absolutePath}",
-                "-DsmokeTest.gradleHomeDir=${rootProject.intTestImage.destinationDir.absolutePath}",
-                "-DsmokeTest.gradleUserHomeDir=${rootProject.file('intTestHomeDir').absolutePath}",
                 "-Dorg.gradle.integtest.executer=embedded",
                 "-Dorg.gradle.integtest.versions=latest",
+                "-Dorg.gradle.integtest.testkit.compatibility=current",
                 "-ea",
                 "-Xmx512m"
         ]
@@ -265,9 +278,9 @@ idea {
         '''))
 
         def gradleRunners = [
-                "Quick Check (precommit)": "quickCheck --daemon",
-                "Regenerate IDEA metadata": "idea --daemon",
-                "Regenerate Int Test Image": "prepareVersionsInfo intTestImage publishLocalArchives --daemon"
+                "Quick Check (precommit)": "quickCheck",
+                "Regenerate IDEA metadata": "idea",
+                "Regenerate Int Test Image": "prepareVersionsInfo intTestImage publishLocalArchives -x killExistingDaemons"
         ]
 
         def runnerClass = "org.gradle.testing.internal.util.GradlewRunner"

@@ -16,25 +16,28 @@
 
 package org.gradle.internal.component.local.model;
 
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier;
 import org.gradle.api.artifacts.component.ComponentIdentifier;
-import org.gradle.internal.component.model.ComponentArtifactMetadata;
+import org.gradle.api.internal.tasks.TaskDependencies;
+import org.gradle.api.tasks.TaskDependency;
 import org.gradle.internal.component.model.IvyArtifactName;
 
 import java.io.File;
 
-public class MissingLocalArtifactMetadata implements LocalComponentArtifactIdentifier, ComponentArtifactMetadata {
+/**
+ * Represents an unknown local artifact, referenced from a dependency definition.
+ */
+public class MissingLocalArtifactMetadata implements LocalComponentArtifactMetadata, ComponentArtifactIdentifier {
     private final ComponentIdentifier componentIdentifier;
-    private final String componentDisplayName;
     private final IvyArtifactName name;
 
-    public MissingLocalArtifactMetadata(ComponentIdentifier componentIdentifier, String componentDisplayName, IvyArtifactName artifactName) {
+    public MissingLocalArtifactMetadata(ComponentIdentifier componentIdentifier, IvyArtifactName artifactName) {
         this.componentIdentifier = componentIdentifier;
-        this.componentDisplayName = componentDisplayName;
         this.name = artifactName;
     }
 
     public String getDisplayName() {
-        return name + " (" + componentDisplayName+ ")";
+        return name + " (" + componentIdentifier.getDisplayName()+ ")";
     }
 
     @Override
@@ -51,7 +54,7 @@ public class MissingLocalArtifactMetadata implements LocalComponentArtifactIdent
     }
 
     @Override
-    public LocalComponentArtifactIdentifier getId() {
+    public ComponentArtifactIdentifier getId() {
         return this;
     }
 
@@ -63,6 +66,11 @@ public class MissingLocalArtifactMetadata implements LocalComponentArtifactIdent
     @Override
     public String toString() {
         return getDisplayName();
+    }
+
+    @Override
+    public TaskDependency getBuildDependencies() {
+        return TaskDependencies.EMPTY;
     }
 
     @Override

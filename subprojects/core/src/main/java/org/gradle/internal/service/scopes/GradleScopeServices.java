@@ -19,8 +19,6 @@ import org.gradle.api.Action;
 import org.gradle.api.internal.DependencyInjectingInstantiator;
 import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.artifacts.dsl.dependencies.ProjectFinder;
-import org.gradle.api.internal.changedetection.state.CachingTreeVisitor;
-import org.gradle.api.internal.changedetection.state.TreeVisitorCacheExpirationStrategy;
 import org.gradle.api.internal.plugins.DefaultPluginManager;
 import org.gradle.api.internal.plugins.ImperativeOnlyPluginApplicator;
 import org.gradle.api.internal.plugins.PluginApplicator;
@@ -49,7 +47,6 @@ import org.gradle.execution.taskgraph.DefaultTaskGraphExecuter;
 import org.gradle.execution.taskgraph.TaskPlanExecutor;
 import org.gradle.initialization.BuildCancellationToken;
 import org.gradle.internal.Factory;
-import org.gradle.internal.TimeProvider;
 import org.gradle.internal.concurrent.CompositeStoppable;
 import org.gradle.internal.event.ListenerManager;
 import org.gradle.internal.logging.LoggingManagerInternal;
@@ -97,17 +94,7 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         return new CommandLineTaskParser(new CommandLineTaskConfigurer(optionReader), taskSelector);
     }
 
-    CachingTreeVisitor createTreeVisitor() {
-        return new CachingTreeVisitor();
-    }
-
-    TreeVisitorCacheExpirationStrategy createTreeVisitorCacheExpirationStrategy(CachingTreeVisitor cachingTreeVisitor, ListenerManager listenerManager) {
-        return new TreeVisitorCacheExpirationStrategy(cachingTreeVisitor, listenerManager);
-    }
-
     BuildExecuter createBuildExecuter() {
-        // initialize TreeVisitorCacheExpirationStrategy so that listeners get registered
-        get(TreeVisitorCacheExpirationStrategy.class);
         return new DefaultBuildExecuter(
                 asList(new DryRunBuildExecutionAction(),
                         new SelectedTaskExecutionAction()));
@@ -133,14 +120,14 @@ public class GradleScopeServices extends DefaultServiceRegistry {
         };
     }
 
-    TaskGraphExecuter createTaskGraphExecuter(ListenerManager listenerManager, TaskPlanExecutor taskPlanExecutor, BuildCancellationToken cancellationToken, TimeProvider timeProvider, BuildOperationExecutor buildOperationExecutor) {
+    TaskGraphExecuter createTaskGraphExecuter(ListenerManager listenerManager, TaskPlanExecutor taskPlanExecutor, BuildCancellationToken cancellationToken, BuildOperationExecutor buildOperationExecutor) {
         Factory<TaskExecuter> taskExecuterFactory = new Factory<TaskExecuter>() {
             @Override
             public TaskExecuter create() {
                 return get(TaskExecuter.class);
             }
         };
-        return new DefaultTaskGraphExecuter(listenerManager, taskPlanExecutor, taskExecuterFactory, cancellationToken, timeProvider, buildOperationExecutor);
+        return new DefaultTaskGraphExecuter(listenerManager, taskPlanExecutor, taskExecuterFactory, cancellationToken, buildOperationExecutor);
     }
 
     ServiceRegistryFactory createServiceRegistryFactory(final ServiceRegistry services) {

@@ -19,7 +19,6 @@ package org.gradle.api.internal.tasks.testing.detection;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.gradle.api.GradleException;
-import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.tasks.testing.DefaultTestClassRunInfo;
 import org.gradle.api.internal.tasks.testing.TestClassProcessor;
 import org.gradle.util.internal.Java9ClassReader;
@@ -35,12 +34,14 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.gradle.internal.FileUtils.hasExtension;
 
 public abstract class AbstractTestFrameworkDetector<T extends TestClassVisitor> implements TestFrameworkDetector {
     protected static final String TEST_CASE = "junit/framework/TestCase";
     protected static final String GROOVY_TEST_CASE = "groovy/util/GroovyTestCase";
+    protected static final String JAVA_LANG_OBJECT = "java/lang/Object";
 
     private List<File> testClassDirectories;
     private final ClassFileExtractionManager classFileExtractionManager;
@@ -49,7 +50,7 @@ public abstract class AbstractTestFrameworkDetector<T extends TestClassVisitor> 
     private final List<String> knownTestCaseClassNames;
 
     private File testClassesDirectory;
-    private FileCollection testClasspath;
+    private Set<File> testClasspath;
 
     protected AbstractTestFrameworkDetector(ClassFileExtractionManager classFileExtractionManager) {
         assert classFileExtractionManager != null;
@@ -80,7 +81,11 @@ public abstract class AbstractTestFrameworkDetector<T extends TestClassVisitor> 
 
         if (superTestClassFile != null) {
             return superTestClassFile;
-        } else { // super test class file not in test class directories
+        } else if (JAVA_LANG_OBJECT.equals(superClassName)) {
+            // java.lang.Object found, which is not a test class
+            return null;
+        } else {
+            // super test class file not in test class directories
             return classFileExtractionManager.getLibraryClassFile(superClassName);
         }
     }
@@ -112,7 +117,7 @@ public abstract class AbstractTestFrameworkDetector<T extends TestClassVisitor> 
     }
 
     @Override
-    public void setTestClasspath(FileCollection testClasspath) {
+    public void setTestClasspath(Set<File> testClasspath) {
         this.testClasspath = testClasspath;
     }
 

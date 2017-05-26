@@ -18,11 +18,15 @@ package org.gradle.integtests.samples
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.Sample
 import org.gradle.test.fixtures.file.TestFile
+import org.gradle.util.Requires
 import org.junit.Rule
+
+import static org.gradle.util.TestPrecondition.JDK8_OR_EARLIER
 
 class SamplesCodeQualityIntegrationTest extends AbstractIntegrationSpec {
     @Rule public final Sample sample = new Sample(temporaryFolder, 'codeQuality')
 
+    @Requires(JDK8_OR_EARLIER)
     def checkReportsGenerated() {
         TestFile projectDir = sample.dir
         TestFile buildDir = projectDir.file('build')
@@ -31,7 +35,7 @@ class SamplesCodeQualityIntegrationTest extends AbstractIntegrationSpec {
         executer.inDirectory(projectDir).requireGradleDistribution().withTasks('check').run()
 
         then:
-        buildDir.file('reports/checkstyle/main.xml').assertIsFile()
+        buildDir.file('reports/checkstyle/main.xml').assertDoesNotExist()
         buildDir.file('reports/checkstyle/main.html').assertIsFile()
         buildDir.file('reports/codenarc/main.html').assertIsFile()
         buildDir.file('reports/codenarc/test.html').assertIsFile()

@@ -15,8 +15,10 @@
  */
 package org.gradle.api.internal.changedetection;
 
+import org.gradle.api.Nullable;
 import org.gradle.api.internal.TaskExecutionHistory;
 import org.gradle.api.tasks.incremental.IncrementalTaskInputs;
+import org.gradle.caching.BuildCacheKey;
 
 import java.util.Collection;
 
@@ -34,6 +36,17 @@ public interface TaskArtifactState {
     IncrementalTaskInputs getInputChanges();
 
     /**
+     * Returns whether it is okay to use results loaded from cache instead of executing the task.
+     */
+    boolean isAllowedToUseCachedResults();
+
+    /**
+     * Returns the calculated cache key for the task's current state, or {@code null} if the task is not cacheable.
+     */
+    @Nullable
+    BuildCacheKey calculateCacheKey();
+
+    /**
      * Called before the task is to be executed. Note that {@link #isUpToDate(java.util.Collection)} may not necessarily have been called.
      */
     void beforeTask();
@@ -46,7 +59,7 @@ public interface TaskArtifactState {
     /**
      * Called when this state is finished with.
      */
-    void finished(boolean wasUpToDate);
+    void finished();
 
     /**
      * Returns the history for this task.

@@ -18,7 +18,7 @@ package org.gradle.api.tasks.bundling
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.archive.ZipTestFixture
-
+import spock.lang.Issue
 import spock.lang.Unroll
 
 import java.nio.charset.Charset
@@ -186,6 +186,52 @@ class ZipIntegrationTest extends AbstractIntegrationSpec {
         metadataCharset | cause
         "'UNSUPPORTED'" | "Charset for metadataCharset 'UNSUPPORTED' is not supported by your JVM"
         null            | "metadataCharset must not be null"
+    }
+
+    @Issue("https://issues.gradle.org/browse/GRADLE-1346")
+    def "task is out of date after `into` changes"() {
+        file("src/main/java/Main.java") << "public class Main {}"
+        buildFile << """
+            apply plugin: "java"
+
+            task zip(type: Zip) {
+                into('src') {
+                    into('data') {
+                        from sourceSets.main.java
+                    }
+                }
+            }
+        """
+
+        when:
+        succeeds "zip"
+        then:
+        skippedTasks.empty
+
+        when:
+        succeeds "zip"
+        then:
+        skippedTasks as List == [":zip"]
+
+        buildFile.delete()
+        buildFile << """
+            apply plugin: "java"
+
+            task zip(type: Zip) {
+                into('sources') {
+                    into('data') {
+                        from sourceSets.main.java
+                    }
+                }
+            }
+        """
+
+        when:
+        succeeds "zip", "--info"
+        then:
+        skippedTasks.empty
+        output.contains "Value of input property 'rootSpec\$1\$1.destPath' has changed for task ':zip'"
+        output.contains "Value of input property 'rootSpec\$1\$1\$1.destPath' has changed for task ':zip'"
     }
 
     private def createTestFiles() {

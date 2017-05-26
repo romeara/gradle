@@ -19,11 +19,14 @@ package org.gradle.internal.logging.slf4j
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.Logging
+import org.gradle.internal.time.TimeProvider
 import org.gradle.internal.logging.events.LogEvent
 import org.gradle.internal.logging.events.OutputEventListener
 import org.slf4j.Marker
 import spock.lang.Specification
 import spock.lang.Unroll
+
+import java.util.concurrent.TimeUnit
 
 import static org.gradle.api.logging.LogLevel.*
 import static org.slf4j.Logger.ROOT_LOGGER_NAME
@@ -32,8 +35,19 @@ import static org.slf4j.Logger.ROOT_LOGGER_NAME
 class OutputEventListenerBackedLoggerTest extends Specification {
 
     final List<LogEvent> events = []
-    final long now = System.currentTimeMillis()
-    final OutputEventListenerBackedLoggerContext context = new OutputEventListenerBackedLoggerContext(System.out, System.err, { now })
+    final long now = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS)
+    final TimeProvider timeProvider = new TimeProvider() {
+        @Override
+        long getCurrentTime() {
+            return now
+        }
+
+        @Override
+        long getCurrentTimeForDuration() {
+            return now
+        }
+    }
+    final OutputEventListenerBackedLoggerContext context = new OutputEventListenerBackedLoggerContext(System.out, System.err, timeProvider)
 
     def setup() {
         context.outputEventListener = Mock(OutputEventListener) {
@@ -349,6 +363,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
         then:
         singleLogEvent().message("message").logLevel(DEBUG).throwable(throwable).eventExpected(eventExpected)
 
+        when:
+        logger().debug("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(DEBUG).throwable(throwable).eventExpected(eventExpected)
+
         where:
         level     | eventExpected
         DEBUG     | true
@@ -445,6 +465,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
 
         then:
         singleLogEvent().message("message").logLevel(INFO).throwable(throwable).eventExpected(eventExpected)
+
+        when:
+        logger().info("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(INFO).throwable(throwable).eventExpected(eventExpected)
 
         where:
         level     | eventExpected
@@ -562,6 +588,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
         then:
         singleLogEvent().message("message").logLevel(LIFECYCLE).throwable(throwable).eventExpected(eventExpected)
 
+        when:
+        logger().lifecycle("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(LIFECYCLE).throwable(throwable).eventExpected(eventExpected)
+
         where:
         level     | eventExpected
         DEBUG     | true
@@ -678,6 +710,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
         then:
         singleLogEvent().message("message").logLevel(QUIET).throwable(throwable).eventExpected(eventExpected)
 
+        when:
+        logger().quiet("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(QUIET).throwable(throwable).eventExpected(eventExpected)
+
         where:
         level     | eventExpected
         DEBUG     | true
@@ -774,6 +812,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
 
         then:
         singleLogEvent().message("message").logLevel(WARN).throwable(throwable).eventExpected(eventExpected)
+
+        when:
+        logger().warn("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(WARN).throwable(throwable).eventExpected(eventExpected)
 
         where:
         level     | eventExpected
@@ -872,6 +916,12 @@ class OutputEventListenerBackedLoggerTest extends Specification {
         then:
         singleLogEvent().message("message").logLevel(ERROR).throwable(throwable)
 
+        when:
+        logger().error("There was a {} error", "bad", throwable)
+
+        then:
+        singleLogEvent().message("There was a bad error").logLevel(ERROR).throwable(throwable)
+
         where:
         level << LogLevel.values()
 
@@ -902,6 +952,4 @@ class OutputEventListenerBackedLoggerTest extends Specification {
         then:
         singleLogEvent().eventExpected(false)
     }
-
-
 }

@@ -36,37 +36,37 @@ include 'b:c'
 rootProject.name = 'test'
 '''
         buildFile << '''
-task t1 << {
-    println "t1 in $project.name"
+task t1 {
+    doLast {
+        println "t1 in $project.name"
+    }
 }
 
 project(':b') {
-    task t3 << {
-        println "t3 in $project.name"
+    task t3 {
+        doLast {
+            println "t3 in $project.name"
+        }
     }
-    task t2 << {
-        println "t2 in $project.name"
+    task t2 {
+        doLast {
+            println "t2 in $project.name"
+        }
     }
 }
 
 project(':b:c') {
-    task t1 << {
-        println "t1 in $project.name"
+    task t1 {
+        doLast {
+            println "t1 in $project.name"
+        }
     }
-    task t2 << {
-        println "t2 in $project.name"
+    task t2 {
+        doLast {
+            println "t2 in $project.name"
+        }
     }
 }'''
-    }
-
-    @TargetGradleVersion(">=1.8 <=1.11")
-    def "cannot fetch task selectors from action in older target version"() {
-        when:
-        withConnection { connection -> connection.action(new FetchAllTaskSelectorsBuildAction()).run() }
-
-        then:
-        Exception e = thrown()
-        e.cause.message.startsWith('No model of type \'BuildInvocations\' is available in this build.')
     }
 
     @TargetGradleVersion(">=1.12")

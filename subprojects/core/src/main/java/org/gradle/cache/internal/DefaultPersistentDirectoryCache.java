@@ -16,9 +16,11 @@
 package org.gradle.cache.internal;
 
 import org.gradle.api.Action;
+import org.gradle.cache.CacheBuilder;
 import org.gradle.cache.CacheValidator;
 import org.gradle.cache.PersistentCache;
 import org.gradle.cache.internal.filelock.LockOptions;
+import org.gradle.internal.concurrent.ExecutorFactory;
 import org.gradle.util.GFileUtils;
 import org.gradle.util.GUtil;
 import org.slf4j.Logger;
@@ -30,24 +32,16 @@ import java.util.Properties;
 
 public class DefaultPersistentDirectoryCache extends DefaultPersistentDirectoryStore implements ReferencablePersistentCache {
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultPersistentDirectoryCache.class);
-    private final File propertiesFile;
     private final Properties properties = new Properties();
     private final Action<? super PersistentCache> initAction;
     private final CacheValidator validator;
     private boolean didRebuild;
 
-    public DefaultPersistentDirectoryCache(File dir, String displayName, CacheValidator validator, Map<String, ?> properties, LockOptions lockOptions, Action<? super PersistentCache> initAction, FileLockManager lockManager) {
-        super(dir, displayName, lockOptions, lockManager);
+    public DefaultPersistentDirectoryCache(File dir, String displayName, CacheValidator validator, Map<String, ?> properties, CacheBuilder.LockTarget lockTarget, LockOptions lockOptions, Action<? super PersistentCache> initAction, FileLockManager lockManager, ExecutorFactory executorFactory) {
+        super(dir, displayName, lockTarget, lockOptions, lockManager, executorFactory);
         this.validator = validator;
         this.initAction = initAction;
-        propertiesFile = new File(dir, "cache.properties");
         this.properties.putAll(properties);
-    }
-
-    @Override
-    protected File getLockTarget() {
-        // Lock the properties file, instead of the directory, for backwards compatibility
-        return propertiesFile;
     }
 
     @Override
@@ -69,7 +63,9 @@ public class DefaultPersistentDirectoryCache extends DefaultPersistentDirectoryS
             }
 
             if (!lock.getUnlockedCleanly()) {
-                LOGGER.debug("Invalidating {} as it was not closed cleanly.", DefaultPersistentDirectoryCache.this);
+                if (!lock.getState().isInInitialState()) {
+                    LOGGER.warn("Invalidating {} as it was not closed cleanly.", DefaultPersistentDirectoryCache.this);
+                }
                 return true;
             }
 
